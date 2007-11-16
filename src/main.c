@@ -32,6 +32,7 @@ static GtkWidget *mwin_fingcombo;
 static GtkListStore *mwin_fingmodel;
 static GtkWidget *mwin_vfy_status;
 static GtkWidget *mwin_vfy_button;
+static GtkWidget *mwin_non_img_label;
 
 static struct fp_dev *fpdev = NULL;
 static struct fp_dscv_print **discovered_prints = NULL;
@@ -146,9 +147,15 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 			(width == 0) ? -1 : width,
 			(height == 0) ? -1 : height);
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label), "Imaging device");
-	} else
+		gtk_widget_hide(mwin_non_img_label);
+		gtk_widget_show(mwin_verify_img);
+	} else {
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label),
 			"Non-imaging device");
+		gtk_widget_show(mwin_non_img_label);
+		gtk_widget_hide(mwin_verify_img);
+	}
+
 	return;
 
 err:
@@ -291,7 +298,7 @@ static void mwin_create(void)
 {
 	GtkCellRenderer *renderer;
 	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *upper_hbox;
-	GtkWidget *button, *label, *vfy_vbox, *vfy_frame, *scan_frame;
+	GtkWidget *button, *label, *vfy_vbox, *vfy_frame, *scan_frame, *img_vbox;
 
 	/* Window */
 	mwin_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -347,9 +354,18 @@ static void mwin_create(void)
 	scan_frame = gtk_frame_new("Scanned Image");
 	gtk_box_pack_start(GTK_BOX(upper_hbox), scan_frame, FALSE, FALSE, 0);
 
+	/* Image vbox */
+	img_vbox = gtk_vbox_new(FALSE, 1);
+	gtk_container_add(GTK_CONTAINER(scan_frame), img_vbox);
+
 	/* Image */
 	mwin_verify_img = gtk_image_new();
-	gtk_container_add(GTK_CONTAINER(scan_frame), mwin_verify_img);
+	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, FALSE, FALSE, 0);
+
+	/* Non-imaging device */
+	mwin_non_img_label = gtk_label_new("This device does not have imaging "
+		"capabilities, no images will be displayed.");
+	gtk_box_pack_start_defaults(GTK_BOX(img_vbox), mwin_non_img_label);
 
 	/* Verification status */
 	vfy_frame = gtk_frame_new("Verification");
