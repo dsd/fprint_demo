@@ -14,6 +14,5 @@ TODO:
 Add enrollment GUI
 Add functionality to delete enrolled prints
 Add functionality to plot detected minutiae on scanned image
-Add image save functionality
 Add bare image capture functionality
 

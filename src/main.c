@@ -35,6 +35,8 @@ static GtkWidget *mwin_vfy_button;
 static GtkWidget *mwin_non_img_label;
 static GtkWidget *mwin_radio_normal;
 static GtkWidget *mwin_radio_bin;
+static GtkWidget *mwin_img_save_btn;
+static GtkWidget *ctrl_frame;
 
 static GdkPixbuf *pixbuf_normal = NULL;
 static GdkPixbuf *pixbuf_bin = NULL;
@@ -80,7 +82,7 @@ static void mwin_fingcombo_select_first(void)
 
 static void mwin_cb_destroy(GtkWidget *widget, gpointer data)
 {
-    gtk_main_quit();
+	gtk_main_quit();
 }
 
 static void mwin_devstatus_update(char *status)
@@ -108,6 +110,7 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 		pixbuf_bin = NULL;
 	}
 	gtk_image_clear(GTK_IMAGE(mwin_verify_img));
+	gtk_widget_set_sensitive(mwin_img_save_btn, FALSE);
 
 	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(mwin_devcombo), &iter)) {
 		mwin_devstatus_update("No devices found.");
@@ -162,15 +165,13 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label), "Imaging device");
 		gtk_widget_hide(mwin_non_img_label);
 		gtk_widget_show(mwin_verify_img);
-		gtk_widget_show(mwin_radio_normal);
-		gtk_widget_show(mwin_radio_bin);
+		gtk_widget_set_sensitive(ctrl_frame, TRUE);
 	} else {
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label),
 			"Non-imaging device");
 		gtk_widget_show(mwin_non_img_label);
 		gtk_widget_hide(mwin_verify_img);
-		gtk_widget_hide(mwin_radio_normal);
-		gtk_widget_hide(mwin_radio_bin);
+		gtk_widget_set_sensitive(ctrl_frame, FALSE);
 	}
 
 	return;
@@ -281,6 +282,7 @@ static void mwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_normal);
 	else
 		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_bin);
+	gtk_widget_set_sensitive(mwin_img_save_btn, TRUE);
 }
 
 static void pixbuf_destroy(guchar *pixels, gpointer data)
@@ -294,6 +296,8 @@ static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
 	struct fp_img *img = NULL;
 	GtkWidget *dialog;
 	int r;
+
+	gtk_widget_set_sensitive(mwin_img_save_btn, FALSE);
 
 	dialog = scan_finger_dialog_new(NULL);
 	gtk_widget_show_all(dialog);
@@ -334,16 +338,54 @@ static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
 	}
 }
 
+static void mwin_cb_img_save(GtkWidget *widget, gpointer user_data)
+{
+	GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(mwin_verify_img));
+	GtkWidget *dialog;
+	gchar *filename;
+	GError *error = NULL;
+
+	g_assert(pixbuf);
+
+	dialog = gtk_file_chooser_dialog_new("Save Image", GTK_WINDOW(mwin_window),
+		GTK_FILE_CHOOSER_ACTION_SAVE,
+		GTK_STOCK_CANCEL, GTK_RESPONSE_CANCEL,
+		GTK_STOCK_SAVE, GTK_RESPONSE_ACCEPT, NULL);
+
+	gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog),
+		TRUE);
+	gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog),
+		"fingerprint.png");
+
+	if (gtk_dialog_run(GTK_DIALOG(dialog)) != GTK_RESPONSE_ACCEPT) {
+		gtk_widget_destroy(dialog);
+		return;
+	}
+
+	filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+	gtk_widget_destroy(dialog);
+	if (!gdk_pixbuf_save(pixbuf, filename, "png", &error, NULL)) {
+		dialog = gtk_message_dialog_new(GTK_WINDOW(mwin_window),
+			GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR,
+			GTK_BUTTONS_CLOSE, error->message);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
+		g_error_free(error);
+	}
+	g_free(filename);
+}
+
 static void mwin_create(void)
 {
 	GtkCellRenderer *renderer;
-	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *upper_hbox;
+	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *upper_hbox, *ui_vbox;
 	GtkWidget *button, *label, *vfy_vbox, *vfy_frame, *scan_frame, *img_vbox;
+	GtkWidget *mwin_ctrl_vbox;
 
 	/* Window */
 	mwin_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(mwin_window), "fprint project demo");
-    g_signal_connect(G_OBJECT(mwin_window), "destroy",
+	g_signal_connect(G_OBJECT(mwin_window), "destroy",
 		G_CALLBACK(mwin_cb_destroy), NULL);
 
 	/* Top level vbox */
@@ -364,7 +406,7 @@ static void mwin_create(void)
 	mwin_devmodel = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_POINTER);
 	mwin_devcombo =
 		gtk_combo_box_new_with_model(GTK_TREE_MODEL(mwin_devmodel));
-    g_signal_connect(G_OBJECT(mwin_devcombo), "changed",
+	g_signal_connect(G_OBJECT(mwin_devcombo), "changed",
 		G_CALLBACK(mwin_cb_dev_changed), NULL);
 
 	renderer = gtk_cell_renderer_text_new();
@@ -386,7 +428,7 @@ static void mwin_create(void)
 
 	/* Buttons */
 	button = gtk_button_new_from_stock(GTK_STOCK_QUIT);
-    g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(mwin_cb_destroy),
+	g_signal_connect(G_OBJECT(button), "clicked", G_CALLBACK(mwin_cb_destroy),
 		NULL);
 	gtk_box_pack_start(GTK_BOX(lower_hbox), button, FALSE, FALSE, 0);
 
@@ -402,24 +444,18 @@ static void mwin_create(void)
 	mwin_verify_img = gtk_image_new();
 	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, FALSE, FALSE, 0);
 
-	/* Image format radio buttons */
-	mwin_radio_normal = gtk_radio_button_new_with_label(NULL, "Normal");
-	g_signal_connect(G_OBJECT(mwin_radio_normal), "toggled",
-		G_CALLBACK(mwin_cb_imgfmt_toggled), NULL);
-	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_radio_normal, FALSE, FALSE, 0);
-
-	mwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
-		GTK_RADIO_BUTTON(mwin_radio_normal), "Binarized");
-	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_radio_bin, FALSE, FALSE, 0);
-
 	/* Non-imaging device */
 	mwin_non_img_label = gtk_label_new("This device does not have imaging "
 		"capabilities, no images will be displayed.");
 	gtk_box_pack_start_defaults(GTK_BOX(img_vbox), mwin_non_img_label);
 
+	/* vbox for verification status and image control frames */
+	ui_vbox = gtk_vbox_new(FALSE, 1);
+	gtk_box_pack_start_defaults(GTK_BOX(upper_hbox), ui_vbox);
+
 	/* Verification status */
 	vfy_frame = gtk_frame_new("Verification");
-	gtk_box_pack_start_defaults(GTK_BOX(upper_hbox), vfy_frame);
+	gtk_box_pack_start_defaults(GTK_BOX(ui_vbox), vfy_frame);
 
 	vfy_vbox = gtk_vbox_new(FALSE, 1);
 	gtk_container_add(GTK_CONTAINER(vfy_frame), vfy_vbox);
@@ -430,7 +466,7 @@ static void mwin_create(void)
 	mwin_fingmodel = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_POINTER);
 	mwin_fingcombo =
 		gtk_combo_box_new_with_model(GTK_TREE_MODEL(mwin_fingmodel));
-    g_signal_connect(G_OBJECT(mwin_fingcombo), "changed",
+	g_signal_connect(G_OBJECT(mwin_fingcombo), "changed",
 		G_CALLBACK(mwin_cb_fing_changed), NULL);
 
 	renderer = gtk_cell_renderer_text_new();
@@ -441,13 +477,39 @@ static void mwin_create(void)
 
 	/* Verify button */
 	mwin_vfy_button = gtk_button_new_with_label("Verify");
-    g_signal_connect(G_OBJECT(mwin_vfy_button), "clicked",
+	g_signal_connect(G_OBJECT(mwin_vfy_button), "clicked",
 		G_CALLBACK(mwin_cb_verify), NULL);
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), mwin_vfy_button, FALSE, FALSE, 0);
 
 	/* Verify status */
 	mwin_vfy_status = gtk_label_new(NULL);
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), mwin_vfy_status, FALSE, FALSE, 0);
+
+	/* Image controls frame */
+	ctrl_frame = gtk_frame_new("Image control");
+	gtk_box_pack_end_defaults(GTK_BOX(ui_vbox), ctrl_frame);
+
+	mwin_ctrl_vbox = gtk_vbox_new(FALSE, 1);
+	gtk_container_add(GTK_CONTAINER(ctrl_frame), mwin_ctrl_vbox);
+
+	/* Image format radio buttons */
+	mwin_radio_normal = gtk_radio_button_new_with_label(NULL, "Normal");
+	g_signal_connect(G_OBJECT(mwin_radio_normal), "toggled",
+		G_CALLBACK(mwin_cb_imgfmt_toggled), NULL);
+	gtk_box_pack_start(GTK_BOX(mwin_ctrl_vbox), mwin_radio_normal, FALSE,
+		FALSE, 0);
+
+	mwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
+		GTK_RADIO_BUTTON(mwin_radio_normal), "Binarized");
+	gtk_box_pack_start(GTK_BOX(mwin_ctrl_vbox), mwin_radio_bin, FALSE,
+		FALSE, 0);
+
+	/* Save image */
+	mwin_img_save_btn = gtk_button_new_from_stock(GTK_STOCK_SAVE);
+	g_signal_connect(G_OBJECT(mwin_img_save_btn), "clicked",
+		G_CALLBACK(mwin_cb_img_save), NULL);
+	gtk_box_pack_end(GTK_BOX(mwin_ctrl_vbox), mwin_img_save_btn, FALSE,
+		FALSE, 0);
 
 	gtk_widget_show_all(mwin_window);
 }
