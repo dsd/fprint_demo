@@ -33,6 +33,11 @@ static GtkListStore *mwin_fingmodel;
 static GtkWidget *mwin_vfy_status;
 static GtkWidget *mwin_vfy_button;
 static GtkWidget *mwin_non_img_label;
+static GtkWidget *mwin_radio_normal;
+static GtkWidget *mwin_radio_bin;
+
+static GdkPixbuf *pixbuf_normal = NULL;
+static GdkPixbuf *pixbuf_bin = NULL;
 
 static struct fp_dev *fpdev = NULL;
 static struct fp_dscv_print **discovered_prints = NULL;
@@ -94,6 +99,14 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 	gchar *tmp;
 	int i = 0;
 
+	if (pixbuf_normal) {
+		g_object_unref(pixbuf_normal);
+		pixbuf_normal = NULL;
+	}
+	if (pixbuf_bin) {
+		g_object_unref(pixbuf_bin);
+		pixbuf_bin = NULL;
+	}
 	gtk_image_clear(GTK_IMAGE(mwin_verify_img));
 
 	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(mwin_devcombo), &iter)) {
@@ -144,16 +157,20 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 		int width = fp_dev_get_img_width(fpdev);
 		int height = fp_dev_get_img_height(fpdev);
 		gtk_widget_set_size_request(mwin_verify_img,
-			(width == 0) ? -1 : width,
-			(height == 0) ? -1 : height);
+			(width == 0) ? 192 : width,
+			(height == 0) ? 192 : height);
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label), "Imaging device");
 		gtk_widget_hide(mwin_non_img_label);
 		gtk_widget_show(mwin_verify_img);
+		gtk_widget_show(mwin_radio_normal);
+		gtk_widget_show(mwin_radio_bin);
 	} else {
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label),
 			"Non-imaging device");
 		gtk_widget_show(mwin_non_img_label);
 		gtk_widget_hide(mwin_verify_img);
+		gtk_widget_hide(mwin_radio_normal);
+		gtk_widget_hide(mwin_radio_bin);
 	}
 
 	return;
@@ -255,6 +272,17 @@ static unsigned char *img_to_rgb(struct fp_img *img)
 	return rgbdata;
 }
 
+static void mwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
+{
+	if (!pixbuf_normal || !pixbuf_bin)
+		return;
+
+	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mwin_radio_normal)))
+		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_normal);
+	else
+		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_bin);
+}
+
 static void pixbuf_destroy(guchar *pixels, gpointer data)
 {
 	g_free(pixels);
@@ -278,19 +306,31 @@ static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
 
 	mwin_vfy_status_verify_result(r);
 
+	if (pixbuf_normal) {
+		g_object_unref(pixbuf_normal);
+		pixbuf_normal = NULL;
+	}
+	if (pixbuf_bin) {
+		g_object_unref(pixbuf_bin);
+		pixbuf_bin = NULL;
+	}
+
 	if (img) {
-		GdkPixbuf *pixbuf;
+		struct fp_img *img_bin = fp_img_binarize(img);
 		unsigned char *rgbdata = img_to_rgb(img);
+		unsigned char *rgbdata_bin = img_to_rgb(img_bin);
 		int width = fp_img_get_width(img);
 		int height = fp_img_get_height(img);
 
 		fp_img_free(img);
+		fp_img_free(img_bin);
 		gtk_widget_set_size_request(mwin_verify_img, width, height);
 
-		pixbuf = gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB, FALSE,
-			8, width, height, width * 3, pixbuf_destroy, NULL);
-		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf);
-		g_object_unref(G_OBJECT(pixbuf));
+		pixbuf_normal = gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
+			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
+		pixbuf_bin = gdk_pixbuf_new_from_data(rgbdata_bin, GDK_COLORSPACE_RGB,
+			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
+		mwin_cb_imgfmt_toggled(mwin_radio_normal, NULL);
 	}
 }
 
@@ -361,6 +401,16 @@ static void mwin_create(void)
 	/* Image */
 	mwin_verify_img = gtk_image_new();
 	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, FALSE, FALSE, 0);
+
+	/* Image format radio buttons */
+	mwin_radio_normal = gtk_radio_button_new_with_label(NULL, "Normal");
+	g_signal_connect(G_OBJECT(mwin_radio_normal), "toggled",
+		G_CALLBACK(mwin_cb_imgfmt_toggled), NULL);
+	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_radio_normal, FALSE, FALSE, 0);
+
+	mwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
+		GTK_RADIO_BUTTON(mwin_radio_normal), "Binarized");
+	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_radio_bin, FALSE, FALSE, 0);
 
 	/* Non-imaging device */
 	mwin_non_img_label = gtk_label_new("This device does not have imaging "
@@ -445,6 +495,11 @@ int main(int argc, char **argv)
 	mwin_select_first_dev();
 
 	gtk_main();
+
+	if (pixbuf_normal)
+		g_object_unref(pixbuf_normal);
+	if (pixbuf_bin)
+		g_object_unref(pixbuf_bin);
 
 	if (fpdev)
 		fp_dev_close(fpdev);
