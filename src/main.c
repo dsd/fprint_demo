@@ -195,17 +195,9 @@ static void mwin_create(void)
 		gtk_notebook_append_page(GTK_NOTEBOOK(mwin_notebook),
 			tab->create(), gtk_label_new(tab->name));
 	}
-/*
-	gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
-		gtk_label_new("Not implemented yet."),
-		gtk_label_new("Enrollment"));
-
-	gtk_notebook_append_page(GTK_NOTEBOOK(notebook),
-		gtk_label_new("Not implemented yet."),
-		gtk_label_new("Image capture"));*/
 
 	/* Device bar */
-	gtk_box_pack_start_defaults(GTK_BOX(main_vbox), mwin_create_devbar());
+	gtk_box_pack_end(GTK_BOX(main_vbox), mwin_create_devbar(), FALSE, FALSE, 0);
 
 	gtk_widget_show_all(mwin_window);
 }

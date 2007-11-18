@@ -343,7 +343,7 @@ static GtkWidget *vwin_create(void)
 
 	/* Image frame */
 	scan_frame = gtk_frame_new("Scanned Image");
-	gtk_box_pack_start(GTK_BOX(vwin_main_hbox), scan_frame, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vwin_main_hbox), scan_frame, TRUE, TRUE, 0);
 
 	/* Image vbox */
 	img_vbox = gtk_vbox_new(FALSE, 1);
@@ -351,7 +351,7 @@ static GtkWidget *vwin_create(void)
 
 	/* Image */
 	mwin_verify_img = gtk_image_new();
-	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, TRUE, FALSE, 0);
 
 	/* Non-imaging device */
 	mwin_non_img_label = gtk_label_new("This device does not have imaging "
@@ -360,7 +360,7 @@ static GtkWidget *vwin_create(void)
 
 	/* vbox for verification status and image control frames */
 	ui_vbox = gtk_vbox_new(FALSE, 1);
-	gtk_box_pack_start_defaults(GTK_BOX(vwin_main_hbox), ui_vbox);
+	gtk_box_pack_end(GTK_BOX(vwin_main_hbox), ui_vbox, FALSE, FALSE, 0);
 
 	/* Verification status */
 	vfy_frame = gtk_frame_new("Verification");
