@@ -1,1 +1,16 @@
 ChangeLog
+*.o
+.deps
+*.swp
+depcomp
+configure
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache
+compile
+config.log
+config.status
+install-sh
+missing
+fprint_demo
