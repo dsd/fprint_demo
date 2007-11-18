@@ -37,27 +37,7 @@ static GtkWidget *vwin_ctrl_frame;
 static GdkPixbuf *pixbuf_normal = NULL;
 static GdkPixbuf *pixbuf_bin = NULL;
 
-static struct fp_dscv_print **discovered_prints = NULL;
 static struct fp_print_data *enroll_data = NULL;
-
-static const char *fingerstr(enum fp_finger finger)
-{
-	const char *names[] = {
-		[LEFT_THUMB] = "Left Thumb",
-		[LEFT_INDEX] = "Left Index Finger",
-		[LEFT_MIDDLE] = "Left Middle Finger",
-		[LEFT_RING] = "Left Ring Finger",
-		[LEFT_LITTLE] = "Left Little Finger",
-		[RIGHT_THUMB] = "Right Thumb",
-		[RIGHT_INDEX] = "Right Index Finger",
-		[RIGHT_MIDDLE] = "Right Middle Finger",
-		[RIGHT_RING] = "Right Ring Finger",
-		[RIGHT_LITTLE] = "Right Little Finger",
-	};
-	if (finger < LEFT_THUMB || finger > RIGHT_LITTLE)
-		return "UNKNOWN";
-	return names[finger];
-}
 
 static void vwin_vfy_status_no_print()
 {
@@ -89,8 +69,6 @@ static void vwin_clear(void)
 	gtk_image_clear(GTK_IMAGE(vwin_verify_img));
 	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
 	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
-	fp_dscv_prints_free(discovered_prints);
-	discovered_prints = NULL;
 
 	gtk_label_set_text(GTK_LABEL(vwin_vfy_status), NULL);
 	gtk_widget_set_sensitive(vwin_fingcombo, FALSE);
@@ -102,16 +80,9 @@ static void vwin_activate_dev(void)
 	struct fp_dscv_print *print;
 	int i = 0;
 	g_assert(fpdev);
+	g_assert(fp_dscv_prints);
 
-	discovered_prints = fp_discover_prints();
-	if (!discovered_prints) {
-		vwin_clear();
-		gtk_label_set_text(GTK_LABEL(vwin_vfy_status),
-			"Error loading enrolled prints.");
-		return;
-	}
-
-	while (print = discovered_prints[i++]) {
+	while (print = fp_dscv_prints[i++]) {
 		GtkTreeIter iter;
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;

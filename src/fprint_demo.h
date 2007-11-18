@@ -22,7 +22,9 @@
 
 /* main.c */
 extern struct fp_dev *fpdev;
+extern struct fp_dscv_print **fp_dscv_prints;
 extern GtkWidget *mwin_window;
+const char *fingerstr(enum fp_finger finger);
 
 /* tabs */
 struct fpd_tab {

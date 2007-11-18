@@ -30,6 +30,7 @@ static GtkWidget *mwin_devstatus_label;
 static GtkWidget *mwin_notebook;
 
 struct fp_dev *fpdev = NULL;
+struct fp_dscv_print **fp_dscv_prints = NULL;
 GtkWidget *mwin_window;
 
 static const struct fpd_tab *tabs[] = {
@@ -91,12 +92,19 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 
 	gtk_tree_model_get(GTK_TREE_MODEL(mwin_devmodel), &iter, 1, &ddev, -1);
 
-	if (fpdev)
-		fp_dev_close(fpdev);
+	fp_dscv_prints_free(fp_dscv_prints);
+	fp_dscv_prints = NULL;
+	fp_dev_close(fpdev);
 
 	fpdev = fp_dev_open(ddev);
 	if (!fpdev) {
 		mwin_devstatus_update("Could not open device.");
+		goto err;
+	}
+
+	fp_dscv_prints = fp_discover_prints();
+	if (!fp_dscv_prints) {
+		mwin_devstatus_update("Error loading enrolled prints.");
 		goto err;
 	}
 
@@ -117,6 +125,10 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 	return;
 
 err:
+	if (fpdev)
+		fp_dev_close(fpdev);
+	fpdev = NULL;
+
 	gtk_label_set_text(GTK_LABEL(mwin_drvname_label), NULL);
 	gtk_label_set_text(GTK_LABEL(mwin_imgcapa_label), NULL);
 }
@@ -264,4 +276,24 @@ int main(int argc, char **argv)
 	fp_exit();
 	return 0;
 }
+
+const char *fingerstr(enum fp_finger finger)
+{
+	const char *names[] = {
+		[LEFT_THUMB] = "Left thumb",
+		[LEFT_INDEX] = "Left index finger",
+		[LEFT_MIDDLE] = "Left middle finger",
+		[LEFT_RING] = "Left ring finger",
+		[LEFT_LITTLE] = "Left little finger",
+		[RIGHT_THUMB] = "Right thumb",
+		[RIGHT_INDEX] = "Right index finger",
+		[RIGHT_MIDDLE] = "Right middle finger",
+		[RIGHT_RING] = "Right ring finger",
+		[RIGHT_LITTLE] = "Right little finger",
+	};
+	if (finger < LEFT_THUMB || finger > RIGHT_LITTLE)
+		return "UNKNOWN";
+	return names[finger];
+}
+
 
