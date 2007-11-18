@@ -1,6 +1,12 @@
 This file lists notable changes in each release. For the full history of all
 changes, see ChangeLog.
 
+2007-11-18: v0.2 release
+ * Add functionality to save images
+ * Tabbed interface
+ * Add enrollment GUI
+ * Improve window sizing behaviour
+
 2007-11-17: v0.1 release
  * Initial release
 
