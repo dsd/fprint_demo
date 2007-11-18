@@ -22,6 +22,15 @@
 
 #include "fprint_demo.h"
 
+#define for_each_tab_call_op(op) do { \
+		int __fe_tabno; \
+		for (__fe_tabno = 0; __fe_tabno < G_N_ELEMENTS(tabs); __fe_tabno++) { \
+			const struct fpd_tab *__fe_tab = tabs[__fe_tabno]; \
+			if (__fe_tab->op) \
+				__fe_tab->op(); \
+		} \
+	} while(0);
+
 static GtkWidget *mwin_devcombo;
 static GtkListStore *mwin_devmodel;
 static GtkWidget *mwin_drvname_label;
@@ -39,34 +48,12 @@ static const struct fpd_tab *tabs[] = {
 	&img_tab,
 };
 
-static void tab_clear()
-{
-	int tabnum = gtk_notebook_get_current_page(GTK_NOTEBOOK(mwin_notebook));
-	const struct fpd_tab *tab = tabs[tabnum];
-	if (tab->clear)
-		tab->clear();
-}
-
-static void __tab_activate_dev(unsigned int tabnum)
-{
-	const struct fpd_tab *tab = tabs[tabnum];
-	if (tab->activate_dev)
-		tab->activate_dev();
-}
-
-static void tab_activate_dev(void)
-{
-	int tabnum = gtk_notebook_get_current_page(GTK_NOTEBOOK(mwin_notebook));
-	__tab_activate_dev((unsigned int) tabnum);
-}
-
 static gboolean mwin_cb_tab_changed(GtkNotebook *notebook,
 	GtkNotebookPage *page, guint tabnum, gpointer data)
 {
-	/* in this context, calling tab_clear() actually clears the previously
-	 * selected tab. */
-	tab_clear();
-	__tab_activate_dev(tabnum);
+	const struct fpd_tab *tab = tabs[tabnum];
+	if (tab->refresh)
+		tab->refresh();
 }
 
 static void mwin_devstatus_update(char *status)
@@ -82,8 +69,9 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 	struct fp_dscv_dev *ddev;
 	struct fp_driver *drv;
 	gchar *tmp;
+	int i;
 
-	tab_clear();
+	for_each_tab_call_op(clear);
 
 	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(mwin_devcombo), &iter)) {
 		mwin_devstatus_update("No devices found.");
@@ -121,7 +109,7 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 		gtk_label_set_markup(GTK_LABEL(mwin_imgcapa_label),
 			"Non-imaging device");
 
-	tab_activate_dev();
+	for_each_tab_call_op(activate_dev);
 	return;
 
 err:
@@ -206,9 +194,8 @@ static void mwin_create(void)
 		const struct fpd_tab *tab = tabs[i];
 		gtk_notebook_append_page(GTK_NOTEBOOK(mwin_notebook),
 			tab->create(), gtk_label_new(tab->name));
-		if (tab->clear)
-			tab->clear();
 	}
+	for_each_tab_call_op(clear);
 
 	/* Device bar */
 	gtk_box_pack_end(GTK_BOX(main_vbox), mwin_create_devbar(), FALSE, FALSE, 0);
@@ -266,10 +253,7 @@ int main(int argc, char **argv)
 
 	gtk_main();
 
-	tab_clear();
-	for (i = 0; i < G_N_ELEMENTS(tabs); i++)
-		if (tabs[i]->exit)
-			tabs[i]->exit();
+	for_each_tab_call_op(clear);
 
 	if (fpdev)
 		fp_dev_close(fpdev);

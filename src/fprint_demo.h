@@ -32,7 +32,7 @@ struct fpd_tab {
 	GtkWidget *(*create)(void);
 	void (*activate_dev)(void);
 	void (*clear)(void);
-	void (*exit)(void);
+	void (*refresh)(void);
 };
 
 extern struct fpd_tab enroll_tab;

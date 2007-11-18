@@ -66,6 +66,9 @@ static void vwin_clear(void)
 		pixbuf_bin = NULL;
 	}
 
+	fp_print_data_free(enroll_data);
+	enroll_data = NULL;
+
 	gtk_image_clear(GTK_IMAGE(vwin_verify_img));
 	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
 	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
@@ -394,16 +397,10 @@ static GtkWidget *vwin_create(void)
 	return vwin_main_hbox;
 }
 
-static void vwin_exit(void)
-{
-	fp_print_data_free(enroll_data);
-}
-
 struct fpd_tab verify_tab = {
 	.name = "Verify",
 	.create = vwin_create,
 	.activate_dev = vwin_activate_dev,
 	.clear = vwin_clear,
-	.exit = vwin_exit,
 };
 
