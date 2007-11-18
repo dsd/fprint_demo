@@ -194,6 +194,8 @@ static void mwin_create(void)
 		const struct fpd_tab *tab = tabs[i];
 		gtk_notebook_append_page(GTK_NOTEBOOK(mwin_notebook),
 			tab->create(), gtk_label_new(tab->name));
+		if (tab->clear)
+			tab->clear();
 	}
 
 	/* Device bar */
