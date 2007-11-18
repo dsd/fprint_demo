@@ -23,16 +23,16 @@
 
 #include "fprint_demo.h"
 
-static GtkWidget *mwin_verify_img;
-static GtkWidget *mwin_fingcombo;
-static GtkListStore *mwin_fingmodel;
-static GtkWidget *mwin_vfy_status;
-static GtkWidget *mwin_vfy_button;
-static GtkWidget *mwin_non_img_label;
-static GtkWidget *mwin_radio_normal;
-static GtkWidget *mwin_radio_bin;
-static GtkWidget *mwin_img_save_btn;
-static GtkWidget *ctrl_frame;
+static GtkWidget *vwin_verify_img;
+static GtkWidget *vwin_fingcombo;
+static GtkListStore *vwin_fingmodel;
+static GtkWidget *vwin_vfy_status;
+static GtkWidget *vwin_vfy_button;
+static GtkWidget *vwin_non_img_label;
+static GtkWidget *vwin_radio_normal;
+static GtkWidget *vwin_radio_bin;
+static GtkWidget *vwin_img_save_btn;
+static GtkWidget *vwin_ctrl_frame;
 
 static GdkPixbuf *pixbuf_normal = NULL;
 static GdkPixbuf *pixbuf_bin = NULL;
@@ -59,20 +59,20 @@ static const char *fingerstr(enum fp_finger finger)
 	return names[finger];
 }
 
-static void mwin_vfy_status_no_print()
+static void vwin_vfy_status_no_print()
 {
-	gtk_label_set_markup(GTK_LABEL(mwin_vfy_status),
+	gtk_label_set_markup(GTK_LABEL(vwin_vfy_status),
 		"<b>Status:</b> No prints detected for this device.");
-	gtk_widget_set_sensitive(mwin_vfy_button, FALSE);
+	gtk_widget_set_sensitive(vwin_vfy_button, FALSE);
 }
 
-static void mwin_fingcombo_select_first(void)
+static void vwin_fingcombo_select_first(void)
 {
 	GtkTreeIter iter;
-	if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(mwin_fingmodel), &iter))
-		gtk_combo_box_set_active_iter(GTK_COMBO_BOX(mwin_fingcombo), &iter);
+	if (gtk_tree_model_get_iter_first(GTK_TREE_MODEL(vwin_fingmodel), &iter))
+		gtk_combo_box_set_active_iter(GTK_COMBO_BOX(vwin_fingcombo), &iter);
 	else
-		mwin_vfy_status_no_print();
+		vwin_vfy_status_no_print();
 }
 
 static void vwin_clear(void)
@@ -86,15 +86,15 @@ static void vwin_clear(void)
 		pixbuf_bin = NULL;
 	}
 
-	gtk_image_clear(GTK_IMAGE(mwin_verify_img));
-	gtk_widget_set_sensitive(mwin_img_save_btn, FALSE);
-	gtk_list_store_clear(GTK_LIST_STORE(mwin_fingmodel));
+	gtk_image_clear(GTK_IMAGE(vwin_verify_img));
+	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
+	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
 	fp_dscv_prints_free(discovered_prints);
 	discovered_prints = NULL;
 
-	gtk_label_set_text(GTK_LABEL(mwin_vfy_status), NULL);
-	gtk_widget_set_sensitive(mwin_fingcombo, FALSE);
-	gtk_widget_set_sensitive(mwin_vfy_button, FALSE);
+	gtk_label_set_text(GTK_LABEL(vwin_vfy_status), NULL);
+	gtk_widget_set_sensitive(vwin_fingcombo, FALSE);
+	gtk_widget_set_sensitive(vwin_vfy_button, FALSE);
 }
 
 static void vwin_activate_dev(void)
@@ -106,7 +106,7 @@ static void vwin_activate_dev(void)
 	discovered_prints = fp_discover_prints();
 	if (!discovered_prints) {
 		vwin_clear();
-		gtk_label_set_text(GTK_LABEL(mwin_vfy_status),
+		gtk_label_set_text(GTK_LABEL(vwin_vfy_status),
 			"Error loading enrolled prints.");
 		return;
 	}
@@ -116,46 +116,46 @@ static void vwin_activate_dev(void)
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;
 
-		gtk_list_store_append(mwin_fingmodel, &iter);
-		gtk_list_store_set(mwin_fingmodel, &iter, 0,
+		gtk_list_store_append(vwin_fingmodel, &iter);
+		gtk_list_store_set(vwin_fingmodel, &iter, 0,
 			fingerstr(fp_dscv_print_get_finger(print)), 1, print, -1);
 	}
 
-	gtk_widget_set_sensitive(mwin_fingcombo, TRUE);
-	mwin_fingcombo_select_first();
+	gtk_widget_set_sensitive(vwin_fingcombo, TRUE);
+	vwin_fingcombo_select_first();
 
 	if (fp_dev_supports_imaging(fpdev)) {
 		int width = fp_dev_get_img_width(fpdev);
 		int height = fp_dev_get_img_height(fpdev);
-		gtk_widget_set_size_request(mwin_verify_img,
+		gtk_widget_set_size_request(vwin_verify_img,
 			(width == 0) ? 192 : width,
 			(height == 0) ? 192 : height);
-		gtk_widget_hide(mwin_non_img_label);
-		gtk_widget_show(mwin_verify_img);
-		gtk_widget_set_sensitive(ctrl_frame, TRUE);
+		gtk_widget_hide(vwin_non_img_label);
+		gtk_widget_show(vwin_verify_img);
+		gtk_widget_set_sensitive(vwin_ctrl_frame, TRUE);
 	} else {
-		gtk_widget_show(mwin_non_img_label);
-		gtk_widget_hide(mwin_verify_img);
-		gtk_widget_set_sensitive(ctrl_frame, FALSE);
+		gtk_widget_show(vwin_non_img_label);
+		gtk_widget_hide(vwin_verify_img);
+		gtk_widget_set_sensitive(vwin_ctrl_frame, FALSE);
 	}
 }
 
-static void mwin_vfy_status_print_loaded(int status)
+static void vwin_vfy_status_print_loaded(int status)
 {
 	if (status == 0) {
-		gtk_label_set_markup(GTK_LABEL(mwin_vfy_status),
+		gtk_label_set_markup(GTK_LABEL(vwin_vfy_status),
 			"<b>Status:</b> Ready for verify scan.");
-		gtk_widget_set_sensitive(mwin_vfy_button, TRUE);
+		gtk_widget_set_sensitive(vwin_vfy_button, TRUE);
 	} else {
 		gchar *msg = g_strdup_printf("<b>Status:</b> Error %d, print corrupt?",
 			status);
-		gtk_label_set_markup(GTK_LABEL(mwin_vfy_status), msg);
-		gtk_widget_set_sensitive(mwin_vfy_button, FALSE);
+		gtk_label_set_markup(GTK_LABEL(vwin_vfy_status), msg);
+		gtk_widget_set_sensitive(vwin_vfy_button, FALSE);
 		g_free(msg);
 	}
 }
 
-static void mwin_cb_fing_changed(GtkWidget *widget, gpointer user_data)
+static void vwin_cb_fing_changed(GtkWidget *widget, gpointer user_data)
 {
 	struct fp_dscv_print *dprint;
 	GtkTreeIter iter;
@@ -164,12 +164,12 @@ static void mwin_cb_fing_changed(GtkWidget *widget, gpointer user_data)
 	fp_print_data_free(enroll_data);
 	enroll_data = NULL;
 
-	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(mwin_fingcombo), &iter))
+	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(vwin_fingcombo), &iter))
 		return;
 
-	gtk_tree_model_get(GTK_TREE_MODEL(mwin_fingmodel), &iter, 1, &dprint, -1);
+	gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter, 1, &dprint, -1);
 	r = fp_print_data_from_dscv_print(dprint, &enroll_data);
-	mwin_vfy_status_print_loaded(r);
+	vwin_vfy_status_print_loaded(r);
 }
 
 static GtkWidget *scan_finger_dialog_new(const char *msg)
@@ -190,7 +190,7 @@ static GtkWidget *scan_finger_dialog_new(const char *msg)
 	return dialog;
 }
 
-static void mwin_vfy_status_verify_result(int code)
+static void vwin_vfy_status_verify_result(int code)
 {
 	const char *msgs[] = {
 		[FP_VERIFY_NO_MATCH] = "Finger does not match.",
@@ -207,7 +207,7 @@ static void mwin_vfy_status_verify_result(int code)
 	else
 		msg = g_strdup_printf("<b>Status:</b> %s", msgs[code]);
 
-	gtk_label_set_markup(GTK_LABEL(mwin_vfy_status), msg);
+	gtk_label_set_markup(GTK_LABEL(vwin_vfy_status), msg);
 	g_free(msg);
 }
 
@@ -229,16 +229,16 @@ static unsigned char *img_to_rgb(struct fp_img *img)
 	return rgbdata;
 }
 
-static void mwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
+static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 {
 	if (!pixbuf_normal || !pixbuf_bin)
 		return;
 
-	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(mwin_radio_normal)))
-		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_normal);
+	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vwin_radio_normal)))
+		gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf_normal);
 	else
-		gtk_image_set_from_pixbuf(GTK_IMAGE(mwin_verify_img), pixbuf_bin);
-	gtk_widget_set_sensitive(mwin_img_save_btn, TRUE);
+		gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf_bin);
+	gtk_widget_set_sensitive(vwin_img_save_btn, TRUE);
 }
 
 static void pixbuf_destroy(guchar *pixels, gpointer data)
@@ -246,14 +246,14 @@ static void pixbuf_destroy(guchar *pixels, gpointer data)
 	g_free(pixels);
 }
 
-static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
+static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
 {
 	struct fp_print_data *data;
 	struct fp_img *img = NULL;
 	GtkWidget *dialog;
 	int r;
 
-	gtk_widget_set_sensitive(mwin_img_save_btn, FALSE);
+	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
 
 	dialog = scan_finger_dialog_new(NULL);
 	gtk_widget_show_all(dialog);
@@ -264,7 +264,7 @@ static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
 	gtk_widget_hide(dialog);
 	gtk_widget_destroy(dialog);
 
-	mwin_vfy_status_verify_result(r);
+	vwin_vfy_status_verify_result(r);
 
 	if (pixbuf_normal) {
 		g_object_unref(pixbuf_normal);
@@ -284,19 +284,19 @@ static void mwin_cb_verify(GtkWidget *widget, gpointer user_data)
 
 		fp_img_free(img);
 		fp_img_free(img_bin);
-		gtk_widget_set_size_request(mwin_verify_img, width, height);
+		gtk_widget_set_size_request(vwin_verify_img, width, height);
 
 		pixbuf_normal = gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
 			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
 		pixbuf_bin = gdk_pixbuf_new_from_data(rgbdata_bin, GDK_COLORSPACE_RGB,
 			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
-		mwin_cb_imgfmt_toggled(mwin_radio_normal, NULL);
+		vwin_cb_imgfmt_toggled(vwin_radio_normal, NULL);
 	}
 }
 
-static void mwin_cb_img_save(GtkWidget *widget, gpointer user_data)
+static void vwin_cb_img_save(GtkWidget *widget, gpointer user_data)
 {
-	GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(mwin_verify_img));
+	GdkPixbuf *pixbuf = gtk_image_get_pixbuf(GTK_IMAGE(vwin_verify_img));
 	GtkWidget *dialog;
 	gchar *filename;
 	GError *error = NULL;
@@ -336,7 +336,7 @@ static GtkWidget *vwin_create(void)
 	GtkCellRenderer *renderer;
 	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *ui_vbox;
 	GtkWidget *button, *label, *vfy_vbox, *vfy_frame, *scan_frame, *img_vbox;
-	GtkWidget *mwin_ctrl_vbox;
+	GtkWidget *vwin_ctrl_vbox;
 	GtkWidget *notebook, *vwin_main_hbox;
 
 	vwin_main_hbox = gtk_hbox_new(FALSE, 1);
@@ -350,13 +350,13 @@ static GtkWidget *vwin_create(void)
 	gtk_container_add(GTK_CONTAINER(scan_frame), img_vbox);
 
 	/* Image */
-	mwin_verify_img = gtk_image_new();
-	gtk_box_pack_start(GTK_BOX(img_vbox), mwin_verify_img, TRUE, FALSE, 0);
+	vwin_verify_img = gtk_image_new();
+	gtk_box_pack_start(GTK_BOX(img_vbox), vwin_verify_img, TRUE, FALSE, 0);
 
 	/* Non-imaging device */
-	mwin_non_img_label = gtk_label_new("This device does not have imaging "
+	vwin_non_img_label = gtk_label_new("This device does not have imaging "
 		"capabilities, no images will be displayed.");
-	gtk_box_pack_start_defaults(GTK_BOX(img_vbox), mwin_non_img_label);
+	gtk_box_pack_start_defaults(GTK_BOX(img_vbox), vwin_non_img_label);
 
 	/* vbox for verification status and image control frames */
 	ui_vbox = gtk_vbox_new(FALSE, 1);
@@ -372,52 +372,52 @@ static GtkWidget *vwin_create(void)
 	/* Discovered prints list */
 	label = gtk_label_new("Select a finger to verify:");
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), label, FALSE, FALSE, 0);
-	mwin_fingmodel = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_POINTER);
-	mwin_fingcombo =
-		gtk_combo_box_new_with_model(GTK_TREE_MODEL(mwin_fingmodel));
-	g_signal_connect(G_OBJECT(mwin_fingcombo), "changed",
-		G_CALLBACK(mwin_cb_fing_changed), NULL);
+	vwin_fingmodel = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_POINTER);
+	vwin_fingcombo =
+		gtk_combo_box_new_with_model(GTK_TREE_MODEL(vwin_fingmodel));
+	g_signal_connect(G_OBJECT(vwin_fingcombo), "changed",
+		G_CALLBACK(vwin_cb_fing_changed), NULL);
 
 	renderer = gtk_cell_renderer_text_new();
-	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(mwin_fingcombo), renderer, TRUE);
-	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(mwin_fingcombo), renderer,
+	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(vwin_fingcombo), renderer, TRUE);
+	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(vwin_fingcombo), renderer,
 		"text", 0, NULL);
-	gtk_box_pack_start(GTK_BOX(vfy_vbox), mwin_fingcombo, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_fingcombo, FALSE, FALSE, 0);
 
 	/* Verify button */
-	mwin_vfy_button = gtk_button_new_with_label("Verify");
-	g_signal_connect(G_OBJECT(mwin_vfy_button), "clicked",
-		G_CALLBACK(mwin_cb_verify), NULL);
-	gtk_box_pack_start(GTK_BOX(vfy_vbox), mwin_vfy_button, FALSE, FALSE, 0);
+	vwin_vfy_button = gtk_button_new_with_label("Verify");
+	g_signal_connect(G_OBJECT(vwin_vfy_button), "clicked",
+		G_CALLBACK(vwin_cb_verify), NULL);
+	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_vfy_button, FALSE, FALSE, 0);
 
 	/* Verify status */
-	mwin_vfy_status = gtk_label_new(NULL);
-	gtk_box_pack_start(GTK_BOX(vfy_vbox), mwin_vfy_status, FALSE, FALSE, 0);
+	vwin_vfy_status = gtk_label_new(NULL);
+	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_vfy_status, FALSE, FALSE, 0);
 
 	/* Image controls frame */
-	ctrl_frame = gtk_frame_new("Image control");
-	gtk_box_pack_end_defaults(GTK_BOX(ui_vbox), ctrl_frame);
+	vwin_ctrl_frame = gtk_frame_new("Image control");
+	gtk_box_pack_end_defaults(GTK_BOX(ui_vbox), vwin_ctrl_frame);
 
-	mwin_ctrl_vbox = gtk_vbox_new(FALSE, 1);
-	gtk_container_add(GTK_CONTAINER(ctrl_frame), mwin_ctrl_vbox);
+	vwin_ctrl_vbox = gtk_vbox_new(FALSE, 1);
+	gtk_container_add(GTK_CONTAINER(vwin_ctrl_frame), vwin_ctrl_vbox);
 
 	/* Image format radio buttons */
-	mwin_radio_normal = gtk_radio_button_new_with_label(NULL, "Normal");
-	g_signal_connect(G_OBJECT(mwin_radio_normal), "toggled",
-		G_CALLBACK(mwin_cb_imgfmt_toggled), NULL);
-	gtk_box_pack_start(GTK_BOX(mwin_ctrl_vbox), mwin_radio_normal, FALSE,
+	vwin_radio_normal = gtk_radio_button_new_with_label(NULL, "Normal");
+	g_signal_connect(G_OBJECT(vwin_radio_normal), "toggled",
+		G_CALLBACK(vwin_cb_imgfmt_toggled), NULL);
+	gtk_box_pack_start(GTK_BOX(vwin_ctrl_vbox), vwin_radio_normal, FALSE,
 		FALSE, 0);
 
-	mwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
-		GTK_RADIO_BUTTON(mwin_radio_normal), "Binarized");
-	gtk_box_pack_start(GTK_BOX(mwin_ctrl_vbox), mwin_radio_bin, FALSE,
+	vwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
+		GTK_RADIO_BUTTON(vwin_radio_normal), "Binarized");
+	gtk_box_pack_start(GTK_BOX(vwin_ctrl_vbox), vwin_radio_bin, FALSE,
 		FALSE, 0);
 
 	/* Save image */
-	mwin_img_save_btn = gtk_button_new_from_stock(GTK_STOCK_SAVE);
-	g_signal_connect(G_OBJECT(mwin_img_save_btn), "clicked",
-		G_CALLBACK(mwin_cb_img_save), NULL);
-	gtk_box_pack_end(GTK_BOX(mwin_ctrl_vbox), mwin_img_save_btn, FALSE,
+	vwin_img_save_btn = gtk_button_new_from_stock(GTK_STOCK_SAVE);
+	g_signal_connect(G_OBJECT(vwin_img_save_btn), "clicked",
+		G_CALLBACK(vwin_cb_img_save), NULL);
+	gtk_box_pack_end(GTK_BOX(vwin_ctrl_vbox), vwin_img_save_btn, FALSE,
 		FALSE, 0);
 
 	return vwin_main_hbox;
