@@ -20,11 +20,17 @@
 #ifndef __FPRINT_DEMO_H__
 #define __FPRINT_DEMO_H__
 
+#include <gtk/gtk.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <libfprint/fprint.h>
+
 /* main.c */
 extern struct fp_dev *fpdev;
 extern struct fp_dscv_print **fp_dscv_prints;
 extern GtkWidget *mwin_window;
 const char *fingerstr(enum fp_finger finger);
+GdkPixbuf *img_to_pixbuf(struct fp_img *img);
+void mwin_refresh_prints(void);
 
 /* tabs */
 struct fpd_tab {

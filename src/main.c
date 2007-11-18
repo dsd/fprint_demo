@@ -18,6 +18,7 @@
  */
 
 #include <gtk/gtk.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <libfprint/fprint.h>
 
 #include "fprint_demo.h"
@@ -52,8 +53,6 @@ static gboolean mwin_cb_tab_changed(GtkNotebook *notebook,
 	GtkNotebookPage *page, guint tabnum, gpointer data)
 {
 	const struct fpd_tab *tab = tabs[tabnum];
-	if (tab->refresh)
-		tab->refresh();
 }
 
 static void mwin_devstatus_update(char *status)
@@ -253,8 +252,6 @@ int main(int argc, char **argv)
 
 	gtk_main();
 
-	for_each_tab_call_op(clear);
-
 	if (fpdev)
 		fp_dev_close(fpdev);
 	fp_exit();
@@ -280,4 +277,48 @@ const char *fingerstr(enum fp_finger finger)
 	return names[finger];
 }
 
+static void pixbuf_destroy(guchar *pixels, gpointer data)
+{
+	g_free(pixels);
+}
+
+GdkPixbuf *img_to_pixbuf(struct fp_img *img)
+{
+	int width = fp_img_get_width(img);
+	int height = fp_img_get_height(img);
+	int size = width * height;
+	unsigned char *imgdata = fp_img_get_data(img);
+	unsigned char *rgbdata = g_malloc(size * 3);
+	size_t i;
+	size_t rgb_offset = 0;
+
+	for (i = 0; i < size; i++) {
+		unsigned char pixel = imgdata[i];
+		rgbdata[rgb_offset++] = pixel;
+		rgbdata[rgb_offset++] = pixel;
+		rgbdata[rgb_offset++] = pixel;
+	}
+
+	return gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
+			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
+}
+
+void mwin_refresh_prints(void)
+{
+	fp_dscv_prints_free(fp_dscv_prints);
+	fp_dscv_prints = NULL;
+	fp_dscv_prints = fp_discover_prints();
+	if (!fp_dscv_prints) {
+		mwin_devstatus_update("Error loading enrolled prints.");
+		if (fpdev)
+			fp_dev_close(fpdev);
+		fpdev = NULL;
+
+		gtk_label_set_text(GTK_LABEL(mwin_drvname_label), NULL);
+		gtk_label_set_text(GTK_LABEL(mwin_imgcapa_label), NULL);
+		for_each_tab_call_op(clear);
+	} else {
+		for_each_tab_call_op(refresh);
+	}
+}
 

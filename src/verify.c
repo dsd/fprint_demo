@@ -78,6 +78,58 @@ static void vwin_clear(void)
 	gtk_widget_set_sensitive(vwin_vfy_button, FALSE);
 }
 
+enum fingcombo_cols {
+	FC_COL_PRINT,
+	FC_COL_FINGNUM,
+	FC_COL_FINGSTR,
+};
+
+static void vwin_refresh(void)
+{
+	struct fp_dscv_print *print;
+	GtkTreeIter iter;
+	int orig_fnum = -1;
+	int i = 0;
+	int fnum;
+
+	/* find and remember currently selected finger */
+	if (gtk_combo_box_get_active_iter(GTK_COMBO_BOX(vwin_fingcombo), &iter)) {
+		gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter,
+			FC_COL_FINGNUM, &orig_fnum, -1);
+	}
+
+	/* re-populate list */
+	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
+	while (print = fp_dscv_prints[i++]) {
+		if (!fp_dev_supports_dscv_print(fpdev, print))
+			continue;
+
+		fnum = fp_dscv_print_get_finger(print);
+		gtk_list_store_append(vwin_fingmodel, &iter);
+		gtk_list_store_set(vwin_fingmodel, &iter, FC_COL_PRINT, print,
+			FC_COL_FINGSTR, fingerstr(fnum), FC_COL_FINGNUM, fnum, -1);
+	}
+
+	/* try and select original again */
+	if (orig_fnum == -1) {
+		vwin_fingcombo_select_first();
+		return;
+	}
+
+	if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(vwin_fingmodel), &iter))
+		return;
+
+	do {
+		gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter,
+			FC_COL_FINGNUM, &fnum, -1);
+		if (fnum == orig_fnum) {
+			gtk_combo_box_set_active_iter(GTK_COMBO_BOX(vwin_fingcombo),
+				&iter);
+			break;
+		}
+	} while (gtk_tree_model_iter_next(GTK_TREE_MODEL(vwin_fingmodel), &iter));
+}
+
 static void vwin_activate_dev(void)
 {
 	struct fp_dscv_print *print;
@@ -87,12 +139,15 @@ static void vwin_activate_dev(void)
 
 	while (print = fp_dscv_prints[i++]) {
 		GtkTreeIter iter;
+		int fnum;
+
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;
 
+		fnum = fp_dscv_print_get_finger(print);
 		gtk_list_store_append(vwin_fingmodel, &iter);
-		gtk_list_store_set(vwin_fingmodel, &iter, 0,
-			fingerstr(fp_dscv_print_get_finger(print)), 1, print, -1);
+		gtk_list_store_set(vwin_fingmodel, &iter, FC_COL_PRINT, print,
+			FC_COL_FINGSTR, fingerstr(fnum), FC_COL_FINGNUM, fnum, -1);
 	}
 
 	gtk_widget_set_sensitive(vwin_fingcombo, TRUE);
@@ -141,7 +196,8 @@ static void vwin_cb_fing_changed(GtkWidget *widget, gpointer user_data)
 	if (!gtk_combo_box_get_active_iter(GTK_COMBO_BOX(vwin_fingcombo), &iter))
 		return;
 
-	gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter, 1, &dprint, -1);
+	gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter,
+		FC_COL_PRINT, &dprint, -1);
 	r = fp_print_data_from_dscv_print(dprint, &enroll_data);
 	vwin_vfy_status_print_loaded(r);
 }
@@ -185,24 +241,6 @@ static void vwin_vfy_status_verify_result(int code)
 	g_free(msg);
 }
 
-static unsigned char *img_to_rgb(struct fp_img *img)
-{
-	int size = fp_img_get_width(img) * fp_img_get_height(img);
-	unsigned char *imgdata = fp_img_get_data(img);
-	unsigned char *rgbdata = g_malloc(size * 3);
-	size_t i;
-	size_t rgb_offset = 0;
-
-	for (i = 0; i < size; i++) {
-		unsigned char pixel = imgdata[i];
-		rgbdata[rgb_offset++] = pixel;
-		rgbdata[rgb_offset++] = pixel;
-		rgbdata[rgb_offset++] = pixel;
-	}
-
-	return rgbdata;
-}
-
 static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 {
 	if (!pixbuf_normal || !pixbuf_bin)
@@ -213,11 +251,6 @@ static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 	else
 		gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf_bin);
 	gtk_widget_set_sensitive(vwin_img_save_btn, TRUE);
-}
-
-static void pixbuf_destroy(guchar *pixels, gpointer data)
-{
-	g_free(pixels);
 }
 
 static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
@@ -251,19 +284,15 @@ static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
 
 	if (img) {
 		struct fp_img *img_bin = fp_img_binarize(img);
-		unsigned char *rgbdata = img_to_rgb(img);
-		unsigned char *rgbdata_bin = img_to_rgb(img_bin);
 		int width = fp_img_get_width(img);
 		int height = fp_img_get_height(img);
 
+		pixbuf_normal = img_to_pixbuf(img);
+		pixbuf_bin = img_to_pixbuf(img_bin);
 		fp_img_free(img);
 		fp_img_free(img_bin);
-		gtk_widget_set_size_request(vwin_verify_img, width, height);
 
-		pixbuf_normal = gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
-			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
-		pixbuf_bin = gdk_pixbuf_new_from_data(rgbdata_bin, GDK_COLORSPACE_RGB,
-			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
+		gtk_widget_set_size_request(vwin_verify_img, width, height);
 		vwin_cb_imgfmt_toggled(vwin_radio_normal, NULL);
 	}
 }
@@ -303,6 +332,15 @@ static void vwin_cb_img_save(GtkWidget *widget, gpointer user_data)
 		g_error_free(error);
 	}
 	g_free(filename);
+}
+
+static gint fing_sort(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b,
+	gpointer data)
+{
+	int num1, num2;
+	gtk_tree_model_get(model, a, FC_COL_FINGNUM, &num1, -1);
+	gtk_tree_model_get(model, b, FC_COL_FINGNUM, &num2, -1);
+	return num1 - num2;
 }
 
 static GtkWidget *vwin_create(void)
@@ -346,16 +384,21 @@ static GtkWidget *vwin_create(void)
 	/* Discovered prints list */
 	label = gtk_label_new("Select a finger to verify:");
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), label, FALSE, FALSE, 0);
-	vwin_fingmodel = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_POINTER);
+	vwin_fingmodel = gtk_list_store_new(3, G_TYPE_POINTER, G_TYPE_INT,
+		G_TYPE_STRING);
 	vwin_fingcombo =
 		gtk_combo_box_new_with_model(GTK_TREE_MODEL(vwin_fingmodel));
 	g_signal_connect(G_OBJECT(vwin_fingcombo), "changed",
 		G_CALLBACK(vwin_cb_fing_changed), NULL);
+	gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(vwin_fingmodel), 0,
+		fing_sort, NULL, NULL);
+	gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(vwin_fingmodel),
+		0, GTK_SORT_ASCENDING);
 
 	renderer = gtk_cell_renderer_text_new();
 	gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(vwin_fingcombo), renderer, TRUE);
 	gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(vwin_fingcombo), renderer,
-		"text", 0, NULL);
+		"text", FC_COL_FINGSTR, NULL);
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_fingcombo, FALSE, FALSE, 0);
 
 	/* Verify button */
@@ -402,5 +445,6 @@ struct fpd_tab verify_tab = {
 	.create = vwin_create,
 	.activate_dev = vwin_activate_dev,
 	.clear = vwin_clear,
+	.refresh = vwin_refresh,
 };
 

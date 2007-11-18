@@ -11,7 +11,6 @@ Written in C. Requires libfprint and GTK+.
 Licensed under the GPL version 2 (see COPYING).
 
 TODO:
-Add enrollment GUI
 Add functionality to delete enrolled prints
 Add functionality to plot detected minutiae on scanned image
 Add bare image capture functionality
