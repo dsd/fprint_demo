@@ -12,6 +12,5 @@ Licensed under the GPL version 2 (see COPYING).
 
 TODO:
 Add functionality to delete enrolled prints
-Add functionality to plot detected minutiae on scanned image
 Add bare image capture functionality
 

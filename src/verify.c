@@ -33,10 +33,11 @@ static GtkWidget *vwin_radio_normal;
 static GtkWidget *vwin_radio_bin;
 static GtkWidget *vwin_img_save_btn;
 static GtkWidget *vwin_ctrl_frame;
+static GtkWidget *vwin_show_minutiae;
+static GtkWidget *vwin_minutiae_cnt;
 
-static GdkPixbuf *pixbuf_normal = NULL;
-static GdkPixbuf *pixbuf_bin = NULL;
-
+static struct fp_img *img_normal = NULL;
+static struct fp_img *img_bin = NULL;
 static struct fp_print_data *enroll_data = NULL;
 
 static void vwin_vfy_status_no_print()
@@ -57,14 +58,10 @@ static void vwin_fingcombo_select_first(void)
 
 static void vwin_clear(void)
 {
-	if (pixbuf_normal) {
-		g_object_unref(pixbuf_normal);
-		pixbuf_normal = NULL;
-	}
-	if (pixbuf_bin) {
-		g_object_unref(pixbuf_bin);
-		pixbuf_bin = NULL;
-	}
+	fp_img_free(img_normal);
+	img_normal = NULL;
+	fp_img_free(img_bin);
+	img_bin = NULL;
 
 	fp_print_data_free(enroll_data);
 	enroll_data = NULL;
@@ -74,6 +71,7 @@ static void vwin_clear(void)
 	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
 
 	gtk_label_set_text(GTK_LABEL(vwin_vfy_status), NULL);
+	gtk_label_set_text(GTK_LABEL(vwin_minutiae_cnt), NULL);
 	gtk_widget_set_sensitive(vwin_fingcombo, FALSE);
 	gtk_widget_set_sensitive(vwin_vfy_button, FALSE);
 }
@@ -232,25 +230,89 @@ static void vwin_vfy_status_verify_result(int code)
 	};
 	gchar *msg;
 
-	if (code < 0)
+	if (code < 0) {
 		msg = g_strdup_printf("<b>Status:</b> Scan failed, error %d", code);
-	else
+		gtk_label_set_text(GTK_LABEL(vwin_minutiae_cnt), NULL);
+	} else {
 		msg = g_strdup_printf("<b>Status:</b> %s", msgs[code]);
+	}
 
 	gtk_label_set_markup(GTK_LABEL(vwin_vfy_status), msg);
 	g_free(msg);
 }
 
-static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
+static void plot_minutiae(unsigned char *rgbdata, int width, int height,
+	struct fp_minutia **minlist, int nr_minutiae)
 {
-	if (!pixbuf_normal || !pixbuf_bin)
+	int i;
+#define write_pixel(num) do { \
+		rgbdata[((num) * 3)] = 0xff; \
+		rgbdata[((num) * 3) + 1] = 0; \
+		rgbdata[((num) * 3) + 2] = 0; \
+	} while(0)
+
+	for (i = 0; i < nr_minutiae; i++) {
+		struct fp_minutia *min = minlist[i];
+		size_t pixel_offset = (min->y * width) + min->x;
+		write_pixel(pixel_offset - 2);
+		write_pixel(pixel_offset - 1);
+		write_pixel(pixel_offset);
+		write_pixel(pixel_offset + 1);
+		write_pixel(pixel_offset + 2);
+
+		write_pixel(pixel_offset - (width * 2));
+		write_pixel(pixel_offset - (width * 1) - 1);
+		write_pixel(pixel_offset - (width * 1));
+		write_pixel(pixel_offset - (width * 1) + 1);
+		write_pixel(pixel_offset + (width * 1) - 1);
+		write_pixel(pixel_offset + (width * 1));
+		write_pixel(pixel_offset + (width * 1) + 1);
+		write_pixel(pixel_offset + (width * 2));
+	}
+}
+
+static void vwin_img_draw()
+{
+	struct fp_minutia **minlist;
+	unsigned char *rgbdata;
+	GdkPixbuf *pixbuf;
+	gchar *tmp;
+	int nr_minutiae;
+	int width;
+	int height;
+
+	if (!img_normal || !img_bin)
 		return;
 
+	minlist = fp_img_get_minutiae(img_normal, &nr_minutiae);
+
 	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vwin_radio_normal)))
-		gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf_normal);
+		rgbdata = img_to_rgbdata(img_normal);
 	else
-		gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf_bin);
+		rgbdata = img_to_rgbdata(img_bin);
+
+	width = fp_img_get_width(img_normal);
+	height = fp_img_get_height(img_normal);
+	gtk_widget_set_size_request(vwin_verify_img, width, height);
+
+	tmp = g_strdup_printf("Detected %d minutiae.", nr_minutiae);
+	gtk_label_set_text(GTK_LABEL(vwin_minutiae_cnt), tmp);
+	g_free(tmp);
+
+	if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(vwin_show_minutiae)))
+		plot_minutiae(rgbdata, width, height, minlist, nr_minutiae);
+
+	pixbuf = gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
+			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
+	gtk_image_set_from_pixbuf(GTK_IMAGE(vwin_verify_img), pixbuf);
+	g_object_unref(pixbuf);
+
 	gtk_widget_set_sensitive(vwin_img_save_btn, TRUE);
+}
+
+static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
+{
+	vwin_img_draw();
 }
 
 static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
@@ -273,27 +335,15 @@ static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
 
 	vwin_vfy_status_verify_result(r);
 
-	if (pixbuf_normal) {
-		g_object_unref(pixbuf_normal);
-		pixbuf_normal = NULL;
-	}
-	if (pixbuf_bin) {
-		g_object_unref(pixbuf_bin);
-		pixbuf_bin = NULL;
-	}
+	fp_img_free(img_normal);
+	img_normal = NULL;
+	fp_img_free(img_bin);
+	img_bin = NULL;
 
 	if (img) {
-		struct fp_img *img_bin = fp_img_binarize(img);
-		int width = fp_img_get_width(img);
-		int height = fp_img_get_height(img);
-
-		pixbuf_normal = img_to_pixbuf(img);
-		pixbuf_bin = img_to_pixbuf(img_bin);
-		fp_img_free(img);
-		fp_img_free(img_bin);
-
-		gtk_widget_set_size_request(vwin_verify_img, width, height);
-		vwin_cb_imgfmt_toggled(vwin_radio_normal, NULL);
+		img_normal = img;
+		img_bin = fp_img_binarize(img);
+		vwin_img_draw();
 	}
 }
 
@@ -411,6 +461,10 @@ static GtkWidget *vwin_create(void)
 	vwin_vfy_status = gtk_label_new(NULL);
 	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_vfy_status, FALSE, FALSE, 0);
 
+	/* Minutiae count */
+	vwin_minutiae_cnt = gtk_label_new(NULL);
+	gtk_box_pack_start(GTK_BOX(vfy_vbox), vwin_minutiae_cnt, FALSE, FALSE, 0);
+
 	/* Image controls frame */
 	vwin_ctrl_frame = gtk_frame_new("Image control");
 	gtk_box_pack_end_defaults(GTK_BOX(ui_vbox), vwin_ctrl_frame);
@@ -428,6 +482,13 @@ static GtkWidget *vwin_create(void)
 	vwin_radio_bin = gtk_radio_button_new_with_label_from_widget(
 		GTK_RADIO_BUTTON(vwin_radio_normal), "Binarized");
 	gtk_box_pack_start(GTK_BOX(vwin_ctrl_vbox), vwin_radio_bin, FALSE,
+		FALSE, 0);
+
+	/* Minutiae plotting */
+	vwin_show_minutiae = gtk_check_button_new_with_label("Show minutiae");
+	g_signal_connect(GTK_OBJECT(vwin_show_minutiae), "toggled",
+		G_CALLBACK(vwin_cb_imgfmt_toggled), NULL);
+	gtk_box_pack_start(GTK_BOX(vwin_ctrl_vbox), vwin_show_minutiae, FALSE,
 		FALSE, 0);
 
 	/* Save image */

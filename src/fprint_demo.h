@@ -29,6 +29,8 @@ extern struct fp_dev *fpdev;
 extern struct fp_dscv_print **fp_dscv_prints;
 extern GtkWidget *mwin_window;
 const char *fingerstr(enum fp_finger finger);
+void pixbuf_destroy(guchar *pixels, gpointer data);
+unsigned char *img_to_rgbdata(struct fp_img *img);
 GdkPixbuf *img_to_pixbuf(struct fp_img *img);
 void mwin_refresh_prints(void);
 

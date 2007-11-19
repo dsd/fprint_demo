@@ -277,16 +277,14 @@ const char *fingerstr(enum fp_finger finger)
 	return names[finger];
 }
 
-static void pixbuf_destroy(guchar *pixels, gpointer data)
+void pixbuf_destroy(guchar *pixels, gpointer data)
 {
 	g_free(pixels);
 }
 
-GdkPixbuf *img_to_pixbuf(struct fp_img *img)
+unsigned char *img_to_rgbdata(struct fp_img *img)
 {
-	int width = fp_img_get_width(img);
-	int height = fp_img_get_height(img);
-	int size = width * height;
+	int size = fp_img_get_width(img) * fp_img_get_height(img);
 	unsigned char *imgdata = fp_img_get_data(img);
 	unsigned char *rgbdata = g_malloc(size * 3);
 	size_t i;
@@ -298,6 +296,15 @@ GdkPixbuf *img_to_pixbuf(struct fp_img *img)
 		rgbdata[rgb_offset++] = pixel;
 		rgbdata[rgb_offset++] = pixel;
 	}
+
+	return rgbdata;
+}
+
+GdkPixbuf *img_to_pixbuf(struct fp_img *img)
+{
+	int width = fp_img_get_width(img);
+	int height = fp_img_get_height(img);
+	unsigned char *rgbdata = img_to_rgbdata(img);
 
 	return gdk_pixbuf_new_from_data(rgbdata, GDK_COLORSPACE_RGB,
 			FALSE, 8, width, height, width * 3, pixbuf_destroy, NULL);
