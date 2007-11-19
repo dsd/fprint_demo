@@ -1,6 +1,10 @@
 This file lists notable changes in each release. For the full history of all
 changes, see ChangeLog.
 
+2007-11-19: v0.3 release
+ * Add functionality to delete enroll data
+ * Add functionality to plot minutiae
+
 2007-11-18: v0.2 release
  * Add functionality to save images
  * Tabbed interface

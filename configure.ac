@@ -1,4 +1,4 @@
-AC_INIT([fprint_demo], [0.2])
+AC_INIT([fprint_demo], [0.3])
 AM_INIT_AUTOMAKE
 AC_CONFIG_SRCDIR([src/main.c])
 
