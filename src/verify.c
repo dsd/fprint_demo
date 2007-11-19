@@ -109,13 +109,11 @@ static void vwin_refresh(void)
 	}
 
 	/* try and select original again */
-	if (orig_fnum == -1) {
+	if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(vwin_fingmodel), &iter)
+			|| orig_fnum == -1) {
 		vwin_fingcombo_select_first();
 		return;
 	}
-
-	if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(vwin_fingmodel), &iter))
-		return;
 
 	do {
 		gtk_tree_model_get(GTK_TREE_MODEL(vwin_fingmodel), &iter,
@@ -123,9 +121,12 @@ static void vwin_refresh(void)
 		if (fnum == orig_fnum) {
 			gtk_combo_box_set_active_iter(GTK_COMBO_BOX(vwin_fingcombo),
 				&iter);
-			break;
+			return;
 		}
 	} while (gtk_tree_model_iter_next(GTK_TREE_MODEL(vwin_fingmodel), &iter));
+
+	/* could not find original -- it may have been deleted */
+	vwin_fingcombo_select_first();
 }
 
 static void vwin_activate_dev(void)

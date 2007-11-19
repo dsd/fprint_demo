@@ -11,6 +11,5 @@ Written in C. Requires libfprint and GTK+.
 Licensed under the GPL version 2 (see COPYING).
 
 TODO:
-Add functionality to delete enrolled prints
 Add bare image capture functionality
 

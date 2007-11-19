@@ -23,6 +23,7 @@
 #include "fprint_demo.h"
 
 static GtkWidget *ewin_enroll_btn[RIGHT_LITTLE+1];
+static GtkWidget *ewin_delete_btn[RIGHT_LITTLE+1];
 static GtkWidget *ewin_status_lbl[RIGHT_LITTLE+1];
 
 static GtkWidget *edlg_dialog;
@@ -207,6 +208,24 @@ static GtkWidget *edlg_create(int fnum)
 	return edlg_dialog;
 }
 
+static void ewin_cb_delete_clicked(GtkWidget *widget, gpointer data)
+{
+	int finger = GPOINTER_TO_INT(data);
+	int r;
+
+	r = fp_print_data_delete(fpdev, finger);
+	if (r < 0) {
+		GtkWidget *dialog =
+			gtk_message_dialog_new_with_markup(GTK_WINDOW(mwin_window),
+				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+				"Could not delete enroll data, error %d", r, NULL);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
+	}
+	mwin_refresh_prints();
+}
+
 static void ewin_cb_enroll_clicked(GtkWidget *widget, gpointer data)
 {
 	int finger = GPOINTER_TO_INT(data);
@@ -241,6 +260,7 @@ static void ewin_clear(void)
 	int i;
 	for (i = LEFT_THUMB; i <= RIGHT_LITTLE; i++) {
 		gtk_widget_set_sensitive(ewin_enroll_btn[i], FALSE);
+		gtk_widget_set_sensitive(ewin_delete_btn[i], FALSE);
 		gtk_label_set_text(GTK_LABEL(ewin_status_lbl[i]), "Not enrolled");
 	}
 }
@@ -250,8 +270,10 @@ static void ewin_refresh(void)
 	struct fp_dscv_print *print;
 	int i;
 
-	for (i = LEFT_THUMB; i <= RIGHT_LITTLE; i++)
+	for (i = LEFT_THUMB; i <= RIGHT_LITTLE; i++) {
 		gtk_label_set_text(GTK_LABEL(ewin_status_lbl[i]), "Not enrolled");
+		gtk_widget_set_sensitive(ewin_delete_btn[i], FALSE);
+	}
 
 	i = 0;
 	while (print = fp_dscv_prints[i++]) {
@@ -261,6 +283,7 @@ static void ewin_refresh(void)
 
 		fnum = fp_dscv_print_get_finger(print);
 		gtk_label_set_text(GTK_LABEL(ewin_status_lbl[fnum]), "Enrolled");
+		gtk_widget_set_sensitive(ewin_delete_btn[fnum], TRUE);
 	}
 }
 
@@ -279,6 +302,7 @@ static void ewin_activate_dev(void)
 
 		fnum = fp_dscv_print_get_finger(print);
 		gtk_label_set_text(GTK_LABEL(ewin_status_lbl[fnum]), "Enrolled");
+		gtk_widget_set_sensitive(ewin_delete_btn[fnum], TRUE);
 	}
 
 	for (i = LEFT_THUMB; i <= RIGHT_LITTLE; i++)
@@ -316,8 +340,10 @@ static GtkWidget *ewin_create(void)
 		ewin_enroll_btn[i] = button;
 
 		button = gtk_button_new_from_stock(GTK_STOCK_DELETE);
-		gtk_widget_set_sensitive(button, FALSE);
+		g_signal_connect(G_OBJECT(button), "clicked",
+			G_CALLBACK(ewin_cb_delete_clicked), GINT_TO_POINTER(i));
 		gtk_table_attach_defaults(GTK_TABLE(table), button, 3, 4, i - 1, i);
+		ewin_delete_btn[i] = button;
 	}
 
 	gtk_box_pack_start(GTK_BOX(vbox), table, FALSE, FALSE, 0);
