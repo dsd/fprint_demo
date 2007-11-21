@@ -45,6 +45,7 @@ struct fpd_tab {
 
 extern struct fpd_tab enroll_tab;
 extern struct fpd_tab verify_tab;
+extern struct fpd_tab identify_tab;
 extern struct fpd_tab img_tab;
 
 #endif

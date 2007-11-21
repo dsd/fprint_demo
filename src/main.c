@@ -46,6 +46,7 @@ GtkWidget *mwin_window;
 static const struct fpd_tab *tabs[] = {
 	&enroll_tab,
 	&verify_tab,
+	&identify_tab,
 	&img_tab,
 };
 
