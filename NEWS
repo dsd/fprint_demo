@@ -1,6 +1,9 @@
 This file lists notable changes in each release. For the full history of all
 changes, see ChangeLog.
 
+2007-11-22: v0.4 release
+ * Add identification functionality
+
 2007-11-19: v0.3 release
  * Add functionality to delete enroll data
  * Add functionality to plot minutiae
