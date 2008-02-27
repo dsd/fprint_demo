@@ -178,7 +178,8 @@ static void mwin_create(void)
 
 	/* Window */
 	mwin_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-	gtk_window_set_title(GTK_WINDOW(mwin_window), "fprint project demo");
+	gtk_window_set_title(GTK_WINDOW(mwin_window),
+		"fprint project demo v" VERSION);
 	g_signal_connect(G_OBJECT(mwin_window), "destroy",
 		G_CALLBACK(mwin_cb_destroy), NULL);
 
