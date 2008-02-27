@@ -14,6 +14,6 @@ PKG_CHECK_MODULES(GTK, "gtk+-2.0")
 AC_SUBST(GTK_LIBS)
 AC_SUBST(GTK_CFLAGS)
 
-AC_CONFIG_FILES([Makefile] [src/Makefile])
+AC_CONFIG_FILES([Makefile] [src/Makefile] [icons/Makefile])
 AC_OUTPUT
 

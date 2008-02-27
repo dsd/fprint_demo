@@ -242,6 +242,7 @@ int main(int argc, char **argv)
 		return r;
 
 	gtk_init(&argc, &argv);
+	gtk_window_set_default_icon_name("fprint_demo");
 
 	mwin_create();
 	mwin_populate_devs();

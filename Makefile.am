@@ -1,5 +1,5 @@
 AUTOMAKE_OPTIONS = dist-bzip2
-SUBDIRS = src
+SUBDIRS = src icons
 DISTCLEANFILES = ChangeLog
 
 desktopdir = $(datadir)/applications
