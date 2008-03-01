@@ -40,7 +40,7 @@ static struct fp_img *img_normal = NULL;
 static struct fp_img *img_bin = NULL;
 static struct fp_print_data *enroll_data = NULL;
 
-static void vwin_vfy_status_no_print()
+static void vwin_vfy_status_no_print(void)
 {
 	gtk_label_set_markup(GTK_LABEL(vwin_vfy_status),
 		"<b>Status:</b> No prints detected for this device.");
@@ -98,7 +98,7 @@ static void vwin_refresh(void)
 
 	/* re-populate list */
 	gtk_list_store_clear(GTK_LIST_STORE(vwin_fingmodel));
-	while (print = fp_dscv_prints[i++]) {
+	while ((print = fp_dscv_prints[i++])) {
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;
 
@@ -136,7 +136,7 @@ static void vwin_activate_dev(void)
 	g_assert(fpdev);
 	g_assert(fp_dscv_prints);
 
-	while (print = fp_dscv_prints[i++]) {
+	while ((print = fp_dscv_prints[i++])) {
 		GtkTreeIter iter;
 		int fnum;
 
@@ -272,7 +272,7 @@ static void plot_minutiae(unsigned char *rgbdata, int width, int height,
 	}
 }
 
-static void vwin_img_draw()
+static void vwin_img_draw(void)
 {
 	struct fp_minutia **minlist;
 	unsigned char *rgbdata;
@@ -318,7 +318,6 @@ static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 
 static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
 {
-	struct fp_print_data *data;
 	struct fp_img *img = NULL;
 	GtkWidget *dialog;
 	int r;
@@ -397,10 +396,10 @@ static gint fing_sort(GtkTreeModel *model, GtkTreeIter *a, GtkTreeIter *b,
 static GtkWidget *vwin_create(void)
 {
 	GtkCellRenderer *renderer;
-	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *ui_vbox;
-	GtkWidget *button, *label, *vfy_vbox, *vfy_frame, *scan_frame, *img_vbox;
+	GtkWidget *ui_vbox;
+	GtkWidget *label, *vfy_vbox, *vfy_frame, *scan_frame, *img_vbox;
 	GtkWidget *vwin_ctrl_vbox;
-	GtkWidget *notebook, *vwin_main_hbox;
+	GtkWidget *vwin_main_hbox;
 
 	vwin_main_hbox = gtk_hbox_new(FALSE, 1);
 

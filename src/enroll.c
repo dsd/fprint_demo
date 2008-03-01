@@ -40,7 +40,7 @@ static int enroll_stage = 0;
 
 static gboolean scan_preview_complete(gpointer data);
 
-static void edlg_run_enroll_stage()
+static void edlg_run_enroll_stage(void)
 {
 	int r;
 	struct fp_img *img = NULL;
@@ -155,7 +155,7 @@ static gboolean scan_preview_complete(gpointer data)
 	return FALSE;
 }
 
-static GtkWidget *edlg_show(GtkWidget *widget, gpointer data)
+static void edlg_show(GtkWidget *widget, gpointer data)
 {
 	edlg_enroll_data = NULL;
 	enroll_stage = 1;
@@ -243,11 +243,10 @@ static void ewin_cb_enroll_clicked(GtkWidget *widget, gpointer data)
 	r = fp_print_data_save(edlg_enroll_data, finger);
 	fp_print_data_free(edlg_enroll_data);
 	if (r < 0) {
-		GtkWidget *dialog =
-			gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_dialog),
-				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
-				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-				"Could not save enroll data, error %d", r, NULL);
+		dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_dialog),
+			GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+			GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+			"Could not save enroll data, error %d", r, NULL);
 		gtk_dialog_run(GTK_DIALOG(dialog));
 		gtk_widget_destroy(dialog);
 	}
@@ -276,7 +275,7 @@ static void ewin_refresh(void)
 	}
 
 	i = 0;
-	while (print = fp_dscv_prints[i++]) {
+	while ((print = fp_dscv_prints[i++])) {
 		int fnum;
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;
@@ -295,7 +294,7 @@ static void ewin_activate_dev(void)
 	g_assert(fpdev);
 	g_assert(fp_dscv_prints);
 
-	while (print = fp_dscv_prints[i++]) {
+	while ((print = fp_dscv_prints[i++])) {
 		int fnum;
 		if (!fp_dev_supports_dscv_print(fpdev, print))
 			continue;

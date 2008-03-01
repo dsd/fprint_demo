@@ -32,7 +32,7 @@ static GtkWidget *iwin_fing_checkbox[RIGHT_LITTLE + 1];
 
 static struct fp_img *img_normal = NULL;
 
-static void iwin_ify_status_not_capable()
+static void iwin_ify_status_not_capable(void)
 {
 	gtk_label_set_markup(GTK_LABEL(iwin_ify_status),
 		"<b>Status:</b> Device does not support identification.");
@@ -69,8 +69,7 @@ static void iwin_refresh(void)
 
 	/* resensitize detected fingers */
 	i = 0;
-	while (print = fp_dscv_prints[i++]) {
-		GtkTreeIter iter;
+	while ((print = fp_dscv_prints[i++])) {
 		int fnum;
 
 		if (!fp_dev_supports_dscv_print(fpdev, print))
@@ -100,7 +99,7 @@ static void iwin_activate_dev(void)
 		return;
 	}
 
-	while (print = fp_dscv_prints[i++]) {
+	while ((print = fp_dscv_prints[i++])) {
 		int fnum;
 
 		if (!fp_dev_supports_dscv_print(fpdev, print))
@@ -123,21 +122,6 @@ static void iwin_activate_dev(void)
 	} else {
 		gtk_widget_show(iwin_non_img_label);
 		gtk_widget_hide(iwin_verify_img);
-	}
-}
-
-static void iwin_ify_status_print_loaded(int status)
-{
-	if (status == 0) {
-		gtk_label_set_markup(GTK_LABEL(iwin_ify_status),
-			"<b>Status:</b> Ready for verify scan.");
-		gtk_widget_set_sensitive(iwin_ify_button, TRUE);
-	} else {
-		gchar *msg = g_strdup_printf("<b>Status:</b> Error %d, print corrupt?",
-			status);
-		gtk_label_set_markup(GTK_LABEL(iwin_ify_status), msg);
-		gtk_widget_set_sensitive(iwin_ify_button, FALSE);
-		g_free(msg);
 	}
 }
 
@@ -189,7 +173,7 @@ static void iwin_ify_result_match(int fnum)
 	g_free(msg);
 }
 
-static void iwin_img_draw()
+static void iwin_img_draw(void)
 {
 	unsigned char *rgbdata;
 	GdkPixbuf *pixbuf;
@@ -236,7 +220,7 @@ static struct fp_dscv_print *dscv_print_for_finger(int fnum)
 	int i = 0;
 	struct fp_dscv_print *dprint;
 
-	while (dprint = fp_dscv_prints[i++]) {
+	while ((dprint = fp_dscv_prints[i++])) {
 		if (!fp_dev_supports_dscv_print(fpdev, dprint))
 			continue;
 		if (fp_dscv_print_get_finger(dprint) == fnum)
@@ -327,7 +311,7 @@ err:
 
 cleanup:
 	i = 0;
-	while (print = gallery[i++])
+	while ((print = gallery[i++]))
 		fp_print_data_free(print);
 	g_free(gallery);
 	g_free(fingnum);
@@ -336,11 +320,9 @@ cleanup:
 
 static GtkWidget *iwin_create(void)
 {
-	GtkCellRenderer *renderer;
-	GtkWidget *main_vbox, *dev_vbox, *lower_hbox, *ui_vbox;
-	GtkWidget *button, *label, *vfy_vbox, *ify_frame, *scan_frame, *img_vbox;
-	GtkWidget *iwin_ctrl_vbox;
-	GtkWidget *notebook, *iwin_main_hbox;
+	GtkWidget *ui_vbox;
+	GtkWidget *label, *vfy_vbox, *ify_frame, *scan_frame, *img_vbox;
+	GtkWidget *iwin_main_hbox;
 	int i;
 
 	iwin_main_hbox = gtk_hbox_new(FALSE, 1);

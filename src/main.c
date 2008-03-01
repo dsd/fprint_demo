@@ -50,12 +50,6 @@ static const struct fpd_tab *tabs[] = {
 	&img_tab,
 };
 
-static gboolean mwin_cb_tab_changed(GtkNotebook *notebook,
-	GtkNotebookPage *page, guint tabnum, gpointer data)
-{
-	const struct fpd_tab *tab = tabs[tabnum];
-}
-
 static void mwin_devstatus_update(char *status)
 {
 	gchar *msg = g_strdup_printf("<b>Status:</b> %s", status);
@@ -69,7 +63,6 @@ static void mwin_cb_dev_changed(GtkWidget *widget, gpointer user_data)
 	struct fp_dscv_dev *ddev;
 	struct fp_driver *drv;
 	gchar *tmp;
-	int i;
 
 	for_each_tab_call_op(clear);
 
@@ -215,7 +208,7 @@ static gboolean mwin_populate_devs(void)
 	if (!discovered_devs)
 		return FALSE;
 
-	for (i = 0; ddev = discovered_devs[i]; i++) {
+	for (i = 0; (ddev = discovered_devs[i]); i++) {
 		struct fp_driver *drv = fp_dscv_dev_get_driver(ddev);
 		GtkTreeIter iter;
 
@@ -235,7 +228,7 @@ static gboolean mwin_select_first_dev(void)
 
 int main(int argc, char **argv)
 {
-	int i, r;
+	int r;
 
 	r = fp_init();
 	if (r < 0)
@@ -247,11 +240,6 @@ int main(int argc, char **argv)
 	mwin_create();
 	mwin_populate_devs();
 	mwin_select_first_dev();
-
-	/* don't connect this handler until late in order to avoid callbacks
-	 * while we are still adding tabs and stuff. */
-	g_signal_connect(G_OBJECT(mwin_notebook), "switch-page",
-		G_CALLBACK(mwin_cb_tab_changed), NULL);
 
 	gtk_main();
 
