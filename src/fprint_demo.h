@@ -48,4 +48,10 @@ extern struct fpd_tab verify_tab;
 extern struct fpd_tab identify_tab;
 extern struct fpd_tab img_tab;
 
+/* helper dialogs */
+GtkWidget *run_please_wait_dialog(char *msg);
+GtkWidget *create_scan_finger_dialog(void);
+void run_scan_finger_dialog(GtkWidget *dialog);
+void destroy_scan_finger_dialog(GtkWidget *dialog);
+
 #endif

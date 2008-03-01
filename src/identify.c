@@ -1,6 +1,6 @@
 /*
  * fprint_demo: Demonstration of libfprint's capabilities
- * Copyright (C) 2007 Daniel Drake <dsd@gentoo.org>
+ * Copyright (C) 2007-2008 Daniel Drake <dsd@gentoo.org>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,6 +31,9 @@ static GtkWidget *iwin_non_img_label;
 static GtkWidget *iwin_fing_checkbox[RIGHT_LITTLE + 1];
 
 static struct fp_img *img_normal = NULL;
+
+static struct fp_print_data **gallery = NULL;
+static int *fingnum = NULL;
 
 static void iwin_ify_status_not_capable(void)
 {
@@ -125,24 +128,6 @@ static void iwin_activate_dev(void)
 	}
 }
 
-static GtkWidget *scan_finger_dialog_new(const char *msg)
-{
-	GtkWidget *dialog, *label;
-
-	dialog = gtk_dialog_new_with_buttons(NULL, GTK_WINDOW(mwin_window),
-		GTK_DIALOG_MODAL | GTK_DIALOG_NO_SEPARATOR, NULL);
-	gtk_window_set_deletable(GTK_WINDOW(dialog), FALSE);
-	if (msg) {
-		label = gtk_label_new(msg);
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), label,
-			FALSE, FALSE, 0);
-	}
-	label = gtk_label_new("Scan your finger now");
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), label, FALSE, FALSE,
-		0);
-	return dialog;
-}
-
 static void iwin_ify_result_other(int code)
 {
 	const char *msgs[] = {
@@ -229,17 +214,74 @@ static struct fp_dscv_print *dscv_print_for_finger(int fnum)
 	return NULL;
 }
 
+static void __identify_cleanup(GtkWidget *dialog)
+{
+	struct fp_print_data *print;
+	int i = 0;
+
+	gtk_widget_destroy(dialog);
+
+	while ((print = gallery[i++]))
+		fp_print_data_free(print);
+	g_free(gallery);
+	g_free(fingnum);
+
+	fingnum = NULL;
+	gallery = NULL;
+}
+
+static void identify_stopped_cb(struct fp_dev *dev, void *user_data)
+{
+	__identify_cleanup(GTK_WIDGET(user_data));
+}
+
+static void identify_cb(struct fp_dev *dev, int result, size_t match_offset,
+	struct fp_img *img, void *user_data)
+{
+	GtkWidget *dialog;
+	int r;
+
+	destroy_scan_finger_dialog(GTK_WIDGET(user_data));
+
+	if (result == FP_VERIFY_MATCH)
+		iwin_ify_result_match(fingnum[match_offset]);
+	else
+		iwin_ify_result_other(result);
+
+	fp_img_free(img_normal);
+	img_normal = NULL;
+
+	if (img) {
+		img_normal = img;
+		iwin_img_draw();
+	}
+
+	dialog = run_please_wait_dialog("Ending identification...");
+	r = fp_async_identify_stop(dev, identify_stopped_cb, dialog);
+	if (r < 0)
+		__identify_cleanup(dialog);
+}
+
+static void scan_finger_response(GtkWidget *dialog, gint arg,
+	gpointer user_data)
+{
+	int r;
+
+	destroy_scan_finger_dialog(dialog);
+	dialog = run_please_wait_dialog("Ending identification...");
+	r = fp_async_identify_stop(fpdev, identify_stopped_cb, dialog);
+	if (r < 0)
+		__identify_cleanup(dialog);
+}
+
 static void iwin_cb_identify(GtkWidget *widget, gpointer user_data)
 {
 	struct fp_print_data *print;
-	struct fp_img *img = NULL;
 	GtkWidget *dialog;
 	int i;
 	int r;
 	size_t offset = 0;
 	int selected_fingers = 0;
-	struct fp_print_data **gallery;
-	int *fingnum;
 
 	/* count number of selected fingers */
 	for (i = LEFT_THUMB; i <= RIGHT_LITTLE; i++)
@@ -277,30 +319,26 @@ static void iwin_cb_identify(GtkWidget *widget, gpointer user_data)
 
 	/* do identification */
 
-	dialog = scan_finger_dialog_new(NULL);
-	gtk_widget_show_all(dialog);
-	while (gtk_events_pending())
-		gtk_main_iteration();
-
-	r = fp_identify_finger_img(fpdev, gallery, &offset, &img);
-	gtk_widget_hide(dialog);
-	gtk_widget_destroy(dialog);
-
-	if (r == FP_VERIFY_MATCH)
-		iwin_ify_result_match(fingnum[offset]);
-	else
-		iwin_ify_result_other(r);
-
-	fp_img_free(img_normal);
-	img_normal = NULL;
-
-	if (img) {
-		img_normal = img;
-		iwin_img_draw();
+	dialog = create_scan_finger_dialog();
+	r = fp_async_identify_start(fpdev, gallery, identify_cb, dialog);
+	if (r < 0) {
+		destroy_scan_finger_dialog(dialog);
+		dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(mwin_window),
+			GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+			GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+			"Could not start identification, error %d", r, NULL);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
+		return;
 	}
 
-	goto cleanup;
+	g_signal_connect(dialog, "response", G_CALLBACK(scan_finger_response),
+		NULL);
+	run_scan_finger_dialog(dialog);
+	return;
+
 err:
+	/* FIXME this leaks the gallery and any already-scanned prints */
 	dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(mwin_window),
 				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
 				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
@@ -308,14 +346,6 @@ err:
 				fingerstr(i), r, NULL);
 	gtk_dialog_run(GTK_DIALOG(dialog));
 	gtk_widget_destroy(dialog);
-
-cleanup:
-	i = 0;
-	while ((print = gallery[i++]))
-		fp_print_data_free(print);
-	g_free(gallery);
-	g_free(fingnum);
-
 }
 
 static GtkWidget *iwin_create(void)

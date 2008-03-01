@@ -1,6 +1,6 @@
 /*
  * fprint_demo: Demonstration of libfprint's capabilities
- * Copyright (C) 2007 Daniel Drake <dsd@gentoo.org>
+ * Copyright (C) 2007-2008 Daniel Drake <dsd@gentoo.org>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,11 +26,17 @@ static GtkWidget *ewin_enroll_btn[RIGHT_LITTLE+1];
 static GtkWidget *ewin_delete_btn[RIGHT_LITTLE+1];
 static GtkWidget *ewin_status_lbl[RIGHT_LITTLE+1];
 
-static GtkWidget *edlg_dialog;
+static GtkWidget *edlg_window;
+static GtkWidget *edlg_please_wait;
+static GtkWidget *edlg_button_ok;
 static GtkWidget *edlg_progress_lbl;
 static GtkWidget *edlg_instr_lbl;
+static GtkWidget *edlg_progress_bar;
 static GtkWidget *edlg_img_hbox;
 static GtkWidget *edlg_last_image = NULL;
+
+/* the GSource ID for the timeout that pulses the progress bar */
+static guint edlg_pulse_timeout = 0;
 
 static struct fp_img *edlg_last_fp_img = NULL;
 static struct fp_print_data *edlg_enroll_data = NULL;
@@ -38,34 +44,81 @@ static struct fp_print_data *edlg_enroll_data = NULL;
 static int nr_enroll_stages = 0;
 static int enroll_stage = 0;
 
-static gboolean scan_preview_complete(gpointer data);
+/* the numeric index of the finger being enrolled */
+static int edlg_finger = 0;
 
-static void edlg_run_enroll_stage(void)
+/* status code for enroll dialog termination.
+ * -1 means enroll in progress
+ *  0 means successful enroll
+ *  positive means error/cancellation
+ */
+static int edlg_result = -1;
+
+static void __enroll_stopped(int result)
 {
-	int r;
-	struct fp_img *img = NULL;
-	gchar *tmp;
-	int passed = 0;
+	if (edlg_please_wait) {
+		gtk_widget_destroy(edlg_please_wait);
+		edlg_please_wait = NULL;
+	}
 
-	tmp = g_strdup_printf("<b>Step %d of %d</b>", enroll_stage,
-		nr_enroll_stages);
-	gtk_label_set_markup(GTK_LABEL(edlg_progress_lbl), tmp);
-	g_free(tmp);
-
-	gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Scan your finger now");
-	while (gtk_events_pending())
-		gtk_main_iteration();
-
-	r = fp_enroll_finger_img(fpdev, &edlg_enroll_data, &img);
-	if (r < 0) {
+	if (result < 0) {
 		GtkWidget *dialog =
-			gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_dialog),
+			gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_window),
 				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
 				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-				"Enroll failed with error %d", r, NULL);
+				"Enroll failed with error %d", result, NULL);
 		gtk_dialog_run(GTK_DIALOG(dialog));
 		gtk_widget_destroy(dialog);
-		gtk_widget_hide(edlg_dialog);
+		edlg_result = 1;
+		gtk_widget_destroy(edlg_window);
+	} else if (result == FP_ENROLL_FAIL) {
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(edlg_progress_bar),
+			"Enrollment failed due to bad scan data.");
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(edlg_progress_bar),
+			0.0);
+		gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Click Cancel to "
+			"continue.");
+		edlg_result = 1;
+	} else if (result == FP_ENROLL_COMPLETE) {
+		gtk_progress_bar_set_text(GTK_PROGRESS_BAR(edlg_progress_bar),
+			"Enrollment complete!");
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(edlg_progress_bar),
+			1.0);
+		gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Click OK to save "
+			"and continue.");
+		edlg_result = 0;
+		gtk_widget_set_sensitive(edlg_button_ok, TRUE);
+		gtk_widget_grab_focus(edlg_button_ok);
+	} else {
+		g_error("unknown enroll result %d", result);
+	}
+}
+
+/* libfprint callback when enroll stop operation has completed */
+static void enroll_stopped(struct fp_dev *dev, void *user_data)
+{
+	__enroll_stopped(GPOINTER_TO_INT(user_data));
+}
+
+static void cancel_progress_pulse(void)
+{
+	g_source_remove(edlg_pulse_timeout);
+	edlg_pulse_timeout = 0;
+}
+
+static void enroll_stage_cb(struct fp_dev *dev, int result,
+	struct fp_print_data *print, struct fp_img *img, void *user_data)
+{
+	gboolean free_tmp = FALSE;
+	gchar *tmp;
+	int r;
+
+	if (result < 0) {
+		cancel_progress_pulse();
+		edlg_please_wait = run_please_wait_dialog("Ending enrollment...");
+		r = fp_async_enroll_stop(dev, enroll_stopped, GINT_TO_POINTER(result));
+		if (r < 0)
+			__enroll_stopped(result);
 		return;
 	}
 
@@ -82,110 +135,134 @@ static void edlg_run_enroll_stage(void)
 		edlg_last_image = NULL;
 	}
 
-	switch (r) {
+	if (print)
+		edlg_enroll_data = print;
+
+	switch (result) {
 	case FP_ENROLL_COMPLETE:
+		tmp = "<b>Enrollment completed!</b>";
+		break;
 	case FP_ENROLL_PASS:
-		tmp = "<b>Scan successful!</b>";
-		passed = 1;
+		tmp = g_strdup_printf("<b>Step %d of %d</b>", ++enroll_stage,
+			nr_enroll_stages);
+		free_tmp = TRUE;
 		break;
 	case FP_ENROLL_FAIL:
-		tmp = "<b>Scan successful!</b>";
-		passed = 2;
+		tmp = "<b>Enrollment failed!</b>";
 		break;
 	case FP_ENROLL_RETRY:
-		tmp = "<b>Bad scan.</b>";
+		tmp = "<b>Bad scan. Please try again.</b>";
 		break;
 	case FP_ENROLL_RETRY_TOO_SHORT:
-		tmp = "<b>Bad scan: swipe was too short.</b>";
+		tmp = "<b>Bad scan: swipe was too short. Please try again.</b>";
 		break;
 	case FP_ENROLL_RETRY_CENTER_FINGER:
-		tmp = "<b>Bad scan: finger was not centered on scanner.</b>";
+		tmp = "<b>Bad scan: finger was not centered on scanner. Please "
+			"try again.</b>";
 		break;
 	case FP_ENROLL_RETRY_REMOVE_FINGER:
 		tmp = "<b>Bad scan: please remove finger before retrying.</b>";
 		break;
+	default:
+		tmp = "Unknown state!";
 	}
 
 	gtk_label_set_markup(GTK_LABEL(edlg_progress_lbl), tmp);
-	gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Please wait...");
-	g_timeout_add(1500, scan_preview_complete, GINT_TO_POINTER(passed));
+	if (free_tmp)
+		g_free(tmp);
+
+	if (result == FP_ENROLL_COMPLETE || result == FP_ENROLL_FAIL) {
+		cancel_progress_pulse();
+		edlg_please_wait = run_please_wait_dialog("Ending enrollment...");
+		r = fp_async_enroll_stop(dev, enroll_stopped, GINT_TO_POINTER(result));
+		if (r < 0)
+			__enroll_stopped(result);
+	}
+
+	/* FIXME show binarized images? */
 }
 
-static gboolean scan_preview_complete(gpointer data)
+/* called when user clicks OK in enroll dialog */
+static void edlg_ok_clicked(GtkWidget *widget, gpointer data)
 {
-	int passed = GPOINTER_TO_INT(data);
+	gtk_widget_destroy(edlg_window);
+}
 
-	if (edlg_last_fp_img) {
-		if (passed) {
-			struct fp_img *img_bin = fp_img_binarize(edlg_last_fp_img);
-			GdkPixbuf *pixbuf = img_to_pixbuf(img_bin);
-			gtk_image_set_from_pixbuf(GTK_IMAGE(edlg_last_image), pixbuf);
-			g_object_unref(G_OBJECT(pixbuf));
-			fp_img_free(img_bin);
-		} else {
-			gtk_container_remove(GTK_CONTAINER(edlg_img_hbox), edlg_last_image);
-			edlg_last_image = NULL;
-		}
-		fp_img_free(edlg_last_fp_img);
-		edlg_last_fp_img = NULL;
+static void enroll_cancelled(struct fp_dev *dev, void *user_data)
+{
+	if (edlg_please_wait) {
+		gtk_widget_destroy(edlg_please_wait);
+		edlg_please_wait = NULL;
+	}
+}
+
+/* called when user clicks cancel in enroll dialog */
+static void edlg_cancel_clicked(GtkWidget *widget, gpointer data)
+{
+	int r;
+
+	if (edlg_result == -1) {
+		/* enrollment is running */
+		cancel_progress_pulse();
+		edlg_please_wait = run_please_wait_dialog("Ending enrollment...");
+		r = fp_async_enroll_stop(fpdev, enroll_cancelled, NULL);
+		if (r < 0)
+			enroll_cancelled(fpdev, NULL);
+	}
+	edlg_result = 1;
+	gtk_widget_destroy(edlg_window);
+}
+
+/* called when enrollment dialog is closed. determine if it was cancelled
+ * or if there is a print to be saved. */
+static gboolean edlg_destroyed(GtkWidget *widget, GdkEvent *event,
+	gpointer data)
+{
+	int r;
+
+	if (edlg_result > 0)
+		return FALSE;
+
+	g_assert(edlg_enroll_data);
+	r = fp_print_data_save(edlg_enroll_data, edlg_finger);
+	fp_print_data_free(edlg_enroll_data);
+	if (r < 0) {
+		GtkWidget *dialog =
+			gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_window),
+				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+				"Could not save enroll data, error %d", r, NULL);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
 	}
 
-	if (edlg_enroll_data) {
-		gtk_label_set_markup(GTK_LABEL(edlg_progress_lbl),
-			"<b>Enrollment complete!</b>");
-		gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Click OK to save "
-			"and continue.");
-		gtk_dialog_set_response_sensitive(GTK_DIALOG(edlg_dialog),
-			GTK_RESPONSE_ACCEPT, TRUE);
-		gtk_dialog_set_response_sensitive(GTK_DIALOG(edlg_dialog),
-			GTK_RESPONSE_REJECT, TRUE);
-	} else if (passed == 2) {
-		gtk_label_set_markup(GTK_LABEL(edlg_progress_lbl),
-			"<b>Enrollment failed due to bad scan data.</b>");
-		gtk_label_set_text(GTK_LABEL(edlg_instr_lbl),
-			"Click cancel to continue");
-		gtk_dialog_set_response_sensitive(GTK_DIALOG(edlg_dialog),
-			GTK_RESPONSE_REJECT, TRUE);
-	} else {
-		if (passed)
-			enroll_stage++;
-		edlg_run_enroll_stage();
-	}
-
+	mwin_refresh_prints();
 	return FALSE;
 }
 
-static void edlg_show(GtkWidget *widget, gpointer data)
+static void edlg_create(void)
 {
-	edlg_enroll_data = NULL;
-	enroll_stage = 1;
-	edlg_run_enroll_stage();
-}
-
-static GtkWidget *edlg_create(int fnum)
-{
-	const char *fstr = fingerstr(fnum);
+	const char *fstr = fingerstr(edlg_finger);
 	gchar *fstr_lower = g_ascii_strdown(fstr, -1);
 	nr_enroll_stages = fp_dev_get_nr_enroll_stages(fpdev);
 	gchar *tmp;
 	GtkWidget *label, *vbox;
+	GtkWidget *button_cancel;
+	GtkWidget *buttonbox;
 
+	edlg_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	gtk_window_set_modal(GTK_WINDOW(edlg_window), TRUE);
+	gtk_window_set_transient_for(GTK_WINDOW(edlg_window),
+		GTK_WINDOW(mwin_window));
+	gtk_window_set_resizable(GTK_WINDOW(edlg_window), FALSE);
+	g_signal_connect(edlg_window, "destroy", G_CALLBACK(edlg_destroyed),
+		NULL);
 	tmp = g_strdup_printf("Enroll %s", fstr_lower);
-
-	edlg_dialog = gtk_dialog_new_with_buttons(tmp, GTK_WINDOW(mwin_window),
-		GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
-		GTK_STOCK_CANCEL, GTK_RESPONSE_REJECT,
-		GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
-		NULL);
+	gtk_window_set_title(GTK_WINDOW(edlg_window), tmp);
 	g_free(tmp);
-	g_signal_connect(G_OBJECT(edlg_dialog), "show", G_CALLBACK(edlg_show),
-		NULL);
-	vbox = GTK_DIALOG(edlg_dialog)->vbox;
 
-	gtk_dialog_set_response_sensitive(GTK_DIALOG(edlg_dialog),
-		GTK_RESPONSE_ACCEPT, FALSE);
-	gtk_dialog_set_response_sensitive(GTK_DIALOG(edlg_dialog),
-		GTK_RESPONSE_REJECT, FALSE);
+	vbox = gtk_vbox_new(FALSE, 5);
+	gtk_container_add(GTK_CONTAINER(edlg_window), vbox);
 
 	tmp = g_strdup_printf("In order to enroll your %s you will have to "
 		"successfully scan your finger %d time%s.",
@@ -193,19 +270,76 @@ static GtkWidget *edlg_create(int fnum)
 		(nr_enroll_stages == 1) ? "" : "s");
 	label = gtk_label_new(tmp);
 	gtk_box_pack_start_defaults(GTK_BOX(vbox), label);
+	g_free(fstr_lower);
+	g_free(tmp);
 
 	edlg_progress_lbl = gtk_label_new(NULL);
 	gtk_box_pack_start_defaults(GTK_BOX(vbox), edlg_progress_lbl);
+	tmp = g_strdup_printf("<b>Step 1 of %d</b>", nr_enroll_stages);
+	gtk_label_set_markup(GTK_LABEL(edlg_progress_lbl), tmp);
+	g_free(tmp);
+
+	edlg_img_hbox = gtk_hbox_new(FALSE, 2);
+	gtk_box_pack_start_defaults(GTK_BOX(vbox), edlg_img_hbox);
+
+	edlg_progress_bar = gtk_progress_bar_new();
+	gtk_box_pack_start_defaults(GTK_BOX(vbox), edlg_progress_bar);
 
 	edlg_instr_lbl = gtk_label_new(NULL);
 	gtk_box_pack_start_defaults(GTK_BOX(vbox), edlg_instr_lbl);
+	gtk_label_set_text(GTK_LABEL(edlg_instr_lbl), "Scan your finger now");
 
-	edlg_img_hbox = gtk_hbox_new(FALSE, 2);
-	gtk_box_pack_end_defaults(GTK_BOX(vbox), edlg_img_hbox);
+	buttonbox = gtk_hbutton_box_new();
+	gtk_button_box_set_layout(GTK_BUTTON_BOX(buttonbox), GTK_BUTTONBOX_END);  
+	gtk_box_pack_end(GTK_BOX(vbox), buttonbox, FALSE, TRUE, 0);
 
-	g_free(fstr_lower);
-	gtk_widget_show_all(vbox);
-	return edlg_dialog;
+	button_cancel = gtk_button_new_from_stock(GTK_STOCK_CANCEL);
+	gtk_box_pack_end(GTK_BOX(buttonbox), button_cancel, FALSE, TRUE, 0);
+	g_signal_connect(G_OBJECT(button_cancel), "clicked",
+		G_CALLBACK(edlg_cancel_clicked), NULL);
+
+	edlg_button_ok = gtk_button_new_from_stock(GTK_STOCK_OK);
+	gtk_box_pack_end(GTK_BOX(buttonbox), edlg_button_ok, FALSE, TRUE, 0);
+	gtk_widget_set_sensitive(edlg_button_ok, FALSE);
+	g_signal_connect(G_OBJECT(edlg_button_ok), "clicked",
+		G_CALLBACK(edlg_ok_clicked), NULL);
+
+	gtk_widget_show_all(edlg_window);
+}
+
+/* timeout-invoked function which pulses the progress bar */
+static gboolean edlg_pulse_progress_bar(gpointer data)
+{
+	gtk_progress_bar_pulse(GTK_PROGRESS_BAR(edlg_progress_bar));
+	return TRUE;
+}
+
+/* open enrollment dialog and start enrollment */
+static void ewin_cb_enroll_clicked(GtkWidget *widget, gpointer data)
+{
+	int r;
+
+	edlg_finger = GPOINTER_TO_INT(data);
+	edlg_result = -1;
+	edlg_enroll_data = NULL;
+	enroll_stage = 1;
+	edlg_create();
+
+	r = fp_async_enroll_start(fpdev, enroll_stage_cb, NULL);
+	if (r < 0) {
+		GtkWidget *dialog =
+			gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_window),
+				GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+				GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+				"Failed to start enrollment, error %d", r, NULL);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
+		gtk_widget_destroy(edlg_window);
+	}
+
+	gtk_progress_bar_pulse(GTK_PROGRESS_BAR(edlg_progress_bar));
+	edlg_pulse_timeout = gdk_threads_add_timeout(100, edlg_pulse_progress_bar,
+		NULL);
 }
 
 static void ewin_cb_delete_clicked(GtkWidget *widget, gpointer data)
@@ -223,34 +357,6 @@ static void ewin_cb_delete_clicked(GtkWidget *widget, gpointer data)
 		gtk_dialog_run(GTK_DIALOG(dialog));
 		gtk_widget_destroy(dialog);
 	}
-	mwin_refresh_prints();
-}
-
-static void ewin_cb_enroll_clicked(GtkWidget *widget, gpointer data)
-{
-	int finger = GPOINTER_TO_INT(data);
-	GtkWidget *dialog;
-	int r;
-
-	dialog = edlg_create(finger);
-	r = gtk_dialog_run(GTK_DIALOG(dialog));
-	gtk_widget_destroy(dialog);
-
-	if (r != GTK_RESPONSE_ACCEPT)	
-		return;
-
-	g_assert(edlg_enroll_data);
-	r = fp_print_data_save(edlg_enroll_data, finger);
-	fp_print_data_free(edlg_enroll_data);
-	if (r < 0) {
-		dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(edlg_dialog),
-			GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
-			GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
-			"Could not save enroll data, error %d", r, NULL);
-		gtk_dialog_run(GTK_DIALOG(dialog));
-		gtk_widget_destroy(dialog);
-	}
-
 	mwin_refresh_prints();
 }
 

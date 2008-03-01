@@ -1,6 +1,6 @@
 /*
  * fprint_demo: Demonstration of libfprint's capabilities
- * Copyright (C) 2007 Daniel Drake <dsd@gentoo.org>
+ * Copyright (C) 2007-2008 Daniel Drake <dsd@gentoo.org>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -201,24 +201,6 @@ static void vwin_cb_fing_changed(GtkWidget *widget, gpointer user_data)
 	vwin_vfy_status_print_loaded(r);
 }
 
-static GtkWidget *scan_finger_dialog_new(const char *msg)
-{
-	GtkWidget *dialog, *label;
-
-	dialog = gtk_dialog_new_with_buttons(NULL, GTK_WINDOW(mwin_window),
-		GTK_DIALOG_MODAL | GTK_DIALOG_NO_SEPARATOR, NULL);
-	gtk_window_set_deletable(GTK_WINDOW(dialog), FALSE);
-	if (msg) {
-		label = gtk_label_new(msg);
-		gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), label,
-			FALSE, FALSE, 0);
-	}
-	label = gtk_label_new("Scan your finger now");
-	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(dialog)->vbox), label, FALSE, FALSE,
-		0);
-	return dialog;
-}
-
 static void vwin_vfy_status_verify_result(int code)
 {
 	const char *msgs[] = {
@@ -316,24 +298,19 @@ static void vwin_cb_imgfmt_toggled(GtkWidget *widget, gpointer data)
 	vwin_img_draw();
 }
 
-static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
+static void verify_stopped_cb(struct fp_dev *dev, void *user_data)
 {
-	struct fp_img *img = NULL;
+	gtk_widget_destroy(GTK_WIDGET(user_data));
+}
+
+static void verify_cb(struct fp_dev *dev, int result, struct fp_img *img,
+	void *user_data)
+{
 	GtkWidget *dialog;
 	int r;
 
-	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
-
-	dialog = scan_finger_dialog_new(NULL);
-	gtk_widget_show_all(dialog);
-	while (gtk_events_pending())
-		gtk_main_iteration();
-
-	r = fp_verify_finger_img(fpdev, enroll_data, &img);
-	gtk_widget_hide(dialog);
-	gtk_widget_destroy(dialog);
-
-	vwin_vfy_status_verify_result(r);
+	destroy_scan_finger_dialog(GTK_WIDGET(user_data));
+	vwin_vfy_status_verify_result(result);
 
 	fp_img_free(img_normal);
 	img_normal = NULL;
@@ -345,6 +322,48 @@ static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
 		img_bin = fp_img_binarize(img);
 		vwin_img_draw();
 	}
+
+	dialog = run_please_wait_dialog("Ending verification...");
+	r = fp_async_verify_stop(dev, verify_stopped_cb, dialog);
+	if (r < 0)
+		gtk_widget_destroy(dialog);
+}
+
+static void scan_finger_response(GtkWidget *dialog, gint arg,
+	gpointer user_data)
+{
+	int r;
+
+	destroy_scan_finger_dialog(dialog);
+	dialog = run_please_wait_dialog("Ending verification...");
+	r = fp_async_verify_stop(fpdev, verify_stopped_cb, dialog);
+	if (r < 0)
+		gtk_widget_destroy(dialog);
+}
+
+static void vwin_cb_verify(GtkWidget *widget, gpointer user_data)
+{
+	GtkWidget *dialog;
+	int r;
+
+	gtk_widget_set_sensitive(vwin_img_save_btn, FALSE);
+
+	dialog = create_scan_finger_dialog();
+	r = fp_async_verify_start(fpdev, enroll_data, verify_cb, dialog);
+	if (r < 0) {
+		destroy_scan_finger_dialog(dialog);
+		dialog = gtk_message_dialog_new_with_markup(GTK_WINDOW(mwin_window),
+			GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
+			GTK_MESSAGE_ERROR, GTK_BUTTONS_OK,
+			"Could not start verification, error %d", r, NULL);
+		gtk_dialog_run(GTK_DIALOG(dialog));
+		gtk_widget_destroy(dialog);
+		return;
+	}
+
+	g_signal_connect(dialog, "response", G_CALLBACK(scan_finger_response),
+		NULL);
+	run_scan_finger_dialog(dialog);
 }
 
 static void vwin_cb_img_save(GtkWidget *widget, gpointer user_data)
