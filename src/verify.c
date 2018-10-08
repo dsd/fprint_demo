@@ -236,7 +236,11 @@ static void plot_minutiae(unsigned char *rgbdata, int width, int height,
 
 	for (i = 0; i < nr_minutiae; i++) {
 		struct fp_minutia *min = minlist[i];
-		size_t pixel_offset = (min->y * width) + min->x;
+		int x, y;
+		size_t pixel_offset;
+
+		fp_minutia_get_coords(min, &x, &y);
+		pixel_offset = (y * width) + x;
 		write_pixel(pixel_offset - 2);
 		write_pixel(pixel_offset - 1);
 		write_pixel(pixel_offset);
